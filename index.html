@@ -279,8 +279,8 @@ textarea.fi{resize:vertical;min-height:100px;line-height:1.65}
 .a-count{display:inline-block;background:var(--danger);color:#fff;border-radius:99px;
   font-size:10px;padding:1px 6px;margin-left:5px;font-family:'DM Mono',monospace}
 .ac{background:var(--navy2);border:1px solid var(--gold-border);border-radius:var(--rl);
-  overflow:hidden;margin-bottom:1.125rem;display:grid;grid-template-columns:170px 1fr;transition:opacity .4s}
-.ac-img{width:170px;min-height:170px;object-fit:cover;display:block;background:var(--navy3)}
+  overflow:hidden;margin-bottom:1.5rem;display:flex;flex-direction:column;transition:opacity .4s}
+.ac-img{width:100%;height:340px;object-fit:cover;display:block;background:var(--navy3);cursor:zoom-in}
 .ac-img-ph{width:170px;min-height:170px;background:var(--navy3);display:flex;align-items:center;justify-content:center;font-size:36px}
 .ac-body{padding:1.125rem 1.25rem;display:flex;flex-direction:column}
 .ac-name{font-family:'Anton',sans-serif;font-size:19px;letter-spacing:.5px;color:var(--gold)}
@@ -292,6 +292,12 @@ textarea.fi{resize:vertical;min-height:100px;line-height:1.65}
 .badge-approved{background:rgba(62,207,142,.1);color:#5eebb0;border:1px solid rgba(62,207,142,.2)}
 .badge-denied{background:rgba(224,85,85,.08);color:#f09090;border:1px solid rgba(224,85,85,.18)}
 .ac-actions{display:flex;gap:8px}
+.btn-view-full{width:100%;padding:9px;border-radius:var(--r);background:rgba(232,184,75,.1);color:var(--gold);border:1px solid var(--gold-border);font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-view-full:hover{background:rgba(232,184,75,.2)}
+.lightbox{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.95);display:flex;align-items:center;justify-content:center;padding:1rem;opacity:0;pointer-events:none;transition:opacity .2s}
+.lightbox.open{opacity:1;pointer-events:all}
+.lightbox img{max-width:100%;max-height:90vh;object-fit:contain;border-radius:var(--r)}
+.lightbox-close{position:absolute;top:16px;right:16px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
 /* ── PW GATE ── */
 #pw-gate{position:fixed;inset:0;z-index:300;background:rgba(4,9,18,.95);
@@ -1079,6 +1085,7 @@ async function loadAdmin(status, btnEl) {
           <div class="ac-name">${esc(s.name)}</div>
           <div class="ac-meta">Age ${s.age}${s.affiliation?' · '+esc(s.affiliation):''} · ${new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
           <div class="ac-desc">${esc(s.description)}</div>
+          ${s.image_url?`<button class="btn-view-full" onclick="openLightbox('${esc(s.image_url)}')">🔍 View Full Image</button>`:''}
           <div class="ac-actions">
             <button class="btn-approve${s.status==='approved'?' btn-off':''}" onclick="decide('${s.id}','approved')">✓ Approve</button>
             <button class="btn-deny${s.status==='denied'?' btn-off':''}" onclick="decide('${s.id}','denied')">✕ Deny</button>
@@ -1130,7 +1137,19 @@ function copyLink(){
     setTimeout(()=>b.textContent='Copy link',2000);
   });
 }
+  function openLightbox(url){
+  document.getElementById('lightbox-img').src=url;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox(){
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightbox-img').src='';
+}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 </script>
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="Full size">
+</div>
 </body>
 </html>
