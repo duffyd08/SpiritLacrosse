@@ -995,16 +995,28 @@ async function loadResults() {
 function onFile(e) {
   const f = e.target.files[0]; if (!f) return;
   selFile = f;
-  const r = new FileReader();
-  r.onload = ev => {
-    const img = document.getElementById('prev-img');
-    img.src = ev.target.result; img.style.display = 'block';
-    document.getElementById('upl-ph').style.display = 'none';
-    document.getElementById('change-ph').style.display = 'block';
-    const z = document.getElementById('upl-zone');
-    z.classList.add('has-img'); z.style.padding = '0';
+  // Convert to JPEG via canvas so preview + upload both work
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width; canvas.height = image.height;
+      canvas.getContext('2d').drawImage(image, 0, 0);
+      canvas.toBlob(blob => {
+        selFile = blob; // replace selFile with converted JPEG
+        const previewUrl = URL.createObjectURL(blob);
+        const img = document.getElementById('prev-img');
+        img.src = previewUrl; img.style.display = 'block';
+        document.getElementById('upl-ph').style.display = 'none';
+        document.getElementById('change-ph').style.display = 'block';
+        const z = document.getElementById('upl-zone');
+        z.classList.add('has-img'); z.style.padding = '0';
+      }, 'image/jpeg', 0.92);
+    };
+    image.src = ev.target.result;
   };
-  r.readAsDataURL(f);
+  reader.readAsDataURL(f);
 }
 
 // ── SUBMIT ────────────────────────────────────────────
