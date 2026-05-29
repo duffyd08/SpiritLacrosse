@@ -994,31 +994,62 @@ async function loadResults() {
 // ── FILE ──────────────────────────────────────────────
 function onFile(e) {
   const f = e.target.files[0]; if (!f) return;
-  selFile = f;
-  // Convert to JPEG via canvas so preview + upload both work
+  
   const reader = new FileReader();
   reader.onload = ev => {
     const image = new Image();
     image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = image.width; canvas.height = image.height;
-      canvas.getContext('2d').drawImage(image, 0, 0);
-      canvas.toBlob(blob => {
-        selFile = blob; // replace selFile with converted JPEG
-        const previewUrl = URL.createObjectURL(blob);
+      try {
+        const canvas = document.createElement('canvas');
+        const MAX = 2048;
+        let w = image.width, h = image.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(image, 0, 0, w, h);
+        canvas.toBlob(blob => {
+          if (!blob) {
+            // canvas failed, just use original file
+            selFile = f;
+          } else {
+            selFile = blob;
+          }
+          const previewUrl = URL.createObjectURL(selFile);
+          const img = document.getElementById('prev-img');
+          img.src = previewUrl; img.style.display = 'block';
+          document.getElementById('upl-ph').style.display = 'none';
+          document.getElementById('change-ph').style.display = 'block';
+          const z = document.getElementById('upl-zone');
+          z.classList.add('has-img'); z.style.padding = '0';
+        }, 'image/jpeg', 0.92);
+      } catch(err) {
+        // fallback — use file as-is
+        selFile = f;
+        const previewUrl = URL.createObjectURL(f);
         const img = document.getElementById('prev-img');
         img.src = previewUrl; img.style.display = 'block';
         document.getElementById('upl-ph').style.display = 'none';
         document.getElementById('change-ph').style.display = 'block';
         const z = document.getElementById('upl-zone');
         z.classList.add('has-img'); z.style.padding = '0';
-      }, 'image/jpeg', 0.92);
+      }
+    };
+    image.onerror = () => {
+      // Image couldn't load (common with HEIC on some browsers)
+      // just use the original file and skip preview
+      selFile = f;
+      document.getElementById('upl-ph').style.display = 'none';
+      document.getElementById('change-ph').style.display = 'block';
+      const z = document.getElementById('upl-zone');
+      z.classList.add('has-img'); z.style.padding = '2rem 1rem';
+      document.getElementById('upl-ph').style.display = 'block';
+      document.getElementById('upl-ph').querySelector('.upl-title').textContent = '📷 Photo selected!';
+      document.getElementById('upl-ph').querySelector('.upl-hint').textContent = f.name;
     };
     image.src = ev.target.result;
   };
   reader.readAsDataURL(f);
 }
-
 // ── SUBMIT ────────────────────────────────────────────
 async function doSubmit() {
   const name = document.getElementById('f-name').value.trim();
@@ -1030,20 +1061,10 @@ async function doSubmit() {
   const btn = document.getElementById('sub-btn');
   btn.disabled=true; btn.textContent='Uploading…';
   try {
-    let uploadFile = selFile;
-let uploadExt = 'jpg';
-// Convert HEIC/HEIF to JPEG using canvas
-if (selFile.type === 'image/heic' || selFile.type === 'image/heif' || selFile.name.toLowerCase().endsWith('.heic') || selFile.name.toLowerCase().endsWith('.heif')) {
-  const bitmap = await createImageBitmap(selFile);
-  const canvas = document.createElement('canvas');
-  canvas.width = bitmap.width; canvas.height = bitmap.height;
-  canvas.getContext('2d').drawImage(bitmap, 0, 0);
-  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
-  uploadFile = blob;
-  uploadExt = 'jpg';
-} else {
-  uploadExt = (selFile.name.split('.').pop() || 'jpg').toLowerCase();
-}
+    try {
+    const ext = selFile.name ? (selFile.name.split('.').pop()||'jpg').toLowerCase() : 'jpg';
+    const fname=`${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const {error:upErr} = await sb.storage.from('illustrations').upload(fname,selFile,{contentType:'image/jpeg'});
 const fname=`${Date.now()}-${Math.random().toString(36).slice(2)}.${uploadExt}`;
 const {error:upErr} = await sb.storage.from('illustrations').upload(fname, uploadFile, {contentType:'image/jpeg'});
     if (upErr) throw upErr;
