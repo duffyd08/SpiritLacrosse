@@ -1034,17 +1034,67 @@ function onFile(e) {
         z.classList.add('has-img'); z.style.padding = '0';
       }
     };
+    function onFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  
+  const isHEIC = f.type === 'image/heic' || f.type === 'image/heif' 
+    || f.name.toLowerCase().endsWith('.heic') 
+    || f.name.toLowerCase().endsWith('.heif');
+
+  if (isHEIC) {
+    // HEIC can't preview in browser — just confirm selection and use as-is
+    selFile = f;
+    const z = document.getElementById('upl-zone');
+    const ph = document.getElementById('upl-ph');
+    z.classList.add('has-img'); z.style.padding = '2rem 1rem';
+    ph.style.display = 'block';
+    ph.innerHTML = '<div class="upl-icon">✅</div><div class="upl-title">Photo selected!</div><div class="upl-hint">' + f.name + '</div>';
+    document.getElementById('change-ph').style.display = 'block';
+    document.getElementById('prev-img').style.display = 'none';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const MAX = 2048;
+        let w = image.width, h = image.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(image, 0, 0, w, h);
+        canvas.toBlob(blob => {
+          selFile = blob || f;
+          const previewUrl = URL.createObjectURL(selFile);
+          const img = document.getElementById('prev-img');
+          img.src = previewUrl; img.style.display = 'block';
+          document.getElementById('upl-ph').style.display = 'none';
+          document.getElementById('change-ph').style.display = 'block';
+          const z = document.getElementById('upl-zone');
+          z.classList.add('has-img'); z.style.padding = '0';
+        }, 'image/jpeg', 0.92);
+      } catch(err) {
+        selFile = f;
+        const previewUrl = URL.createObjectURL(f);
+        const img = document.getElementById('prev-img');
+        img.src = previewUrl; img.style.display = 'block';
+        document.getElementById('upl-ph').style.display = 'none';
+        document.getElementById('change-ph').style.display = 'block';
+        const z = document.getElementById('upl-zone');
+        z.classList.add('has-img'); z.style.padding = '0';
+      }
+    };
     image.onerror = () => {
-      // Image couldn't load (common with HEIC on some browsers)
-      // just use the original file and skip preview
       selFile = f;
-      document.getElementById('upl-ph').style.display = 'none';
-      document.getElementById('change-ph').style.display = 'block';
       const z = document.getElementById('upl-zone');
+      const ph = document.getElementById('upl-ph');
       z.classList.add('has-img'); z.style.padding = '2rem 1rem';
-      document.getElementById('upl-ph').style.display = 'block';
-      document.getElementById('upl-ph').querySelector('.upl-title').textContent = '📷 Photo selected!';
-      document.getElementById('upl-ph').querySelector('.upl-hint').textContent = f.name;
+      ph.style.display = 'block';
+      ph.innerHTML = '<div class="upl-icon">✅</div><div class="upl-title">Photo selected!</div><div class="upl-hint">' + f.name + '</div>';
+      document.getElementById('change-ph').style.display = 'block';
     };
     image.src = ev.target.result;
   };
