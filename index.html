@@ -1018,9 +1018,22 @@ async function doSubmit() {
   const btn = document.getElementById('sub-btn');
   btn.disabled=true; btn.textContent='Uploading…';
   try {
-    const ext=(selFile.name.split('.').pop()||'jpg').toLowerCase();
-    const fname=`${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const {error:upErr} = await sb.storage.from('illustrations').upload(fname,selFile,{contentType:selFile.type});
+    let uploadFile = selFile;
+let uploadExt = 'jpg';
+// Convert HEIC/HEIF to JPEG using canvas
+if (selFile.type === 'image/heic' || selFile.type === 'image/heif' || selFile.name.toLowerCase().endsWith('.heic') || selFile.name.toLowerCase().endsWith('.heif')) {
+  const bitmap = await createImageBitmap(selFile);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width; canvas.height = bitmap.height;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
+  uploadFile = blob;
+  uploadExt = 'jpg';
+} else {
+  uploadExt = (selFile.name.split('.').pop() || 'jpg').toLowerCase();
+}
+const fname=`${Date.now()}-${Math.random().toString(36).slice(2)}.${uploadExt}`;
+const {error:upErr} = await sb.storage.from('illustrations').upload(fname, uploadFile, {contentType:'image/jpeg'});
     if (upErr) throw upErr;
     const {data:urlD} = sb.storage.from('illustrations').getPublicUrl(fname);
     const {error:insErr} = await sb.from('illustrations').insert([{name,age:parseInt(age),affiliation:aff||null,description:desc,image_url:urlD.publicUrl,status:'pending'}]);
