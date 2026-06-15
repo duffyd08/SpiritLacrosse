@@ -1434,6 +1434,12 @@ const ADMIN_PW = 'Navy984**$$';
 const RESEND_KEY = 're_13iqwVbt_WwsxGLX3mi9ujbns7SYXzGgk';
 
 let sb = null, selFile = null, curAdminStatus = 'pending';
+let reorderMode = false;
+
+function toggleReorderMode() {
+  reorderMode = !reorderMode;
+  loadAdmin('approved', document.querySelector('.atab.active'));
+}
 let allApproved = [], cache = {};
 
 // ── COVER IMAGE (base64 embedded) ──────────────────────
@@ -1768,7 +1774,7 @@ async function loadStick() {
   if (subText) subText.textContent = 'Fetching carvings…';
 
   try {
-    const { data, error } = await sb.from('illustrations').select('*').eq('status','approved').order('created_at',{ascending:false});
+    const { data, error } = await sb.from('illustrations').select('*').eq('status','approved').order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
     if (error) throw error;
     data.forEach(s => cache[s.id] = s);
     allStickData = data.filter(s => s.image_url);
@@ -2324,14 +2330,50 @@ function checkPw() {
 }
 
 // ── ADMIN ──────────────────────────────────────────────
+async function moveCarving(id, idx, direction) {
+  try {
+    // Fetch current approved list in current order
+    const { data, error } = await sb.from('illustrations').select('id,sort_order').eq('status','approved').order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
+    if (error) throw error;
+
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= data.length) return;
+
+    // Assign sequential sort_order values 0..n-1 based on current order,
+    // then swap the two positions being moved.
+    const ordered = data.map((s, i) => ({ id: s.id, sort_order: i }));
+    const a = ordered[idx];
+    const b = ordered[targetIdx];
+    const tmp = a.sort_order;
+    a.sort_order = b.sort_order;
+    b.sort_order = tmp;
+
+    // Persist all sort_order values (cheap for typical gallery sizes)
+    await Promise.all(ordered.map(o =>
+      sb.from('illustrations').update({ sort_order: o.sort_order }).eq('id', o.id)
+    ));
+
+    loadAdmin('approved', document.querySelector('.atab.active'));
+  } catch(e) {
+    alert('Reorder failed: ' + e.message);
+  }
+}
+
 async function loadAdmin(status, btnEl) {
   curAdminStatus = status;
+  if (status !== 'approved') reorderMode = false;
   document.querySelectorAll('.atab').forEach(b=>b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
   const el = document.getElementById('admin-out');
   el.innerHTML='<div class="loading"><div class="spin"></div></div>';
   try {
-    const {data,error} = await sb.from('illustrations').select('*').eq('status',status).order('created_at',{ascending:false});
+    let query = sb.from('illustrations').select('*').eq('status',status);
+    if (status === 'approved') {
+      query = query.order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
+    } else {
+      query = query.order('created_at',{ascending:false});
+    }
+    const {data,error} = await query;
     if (error) throw error;
     data.forEach(s=>cache[s.id]=s);
     if (!data.length){
@@ -2339,12 +2381,25 @@ async function loadAdmin(status, btnEl) {
       el.innerHTML=`<div class="empty"><div class="empty-icon">${icons[status]}</div><div class="empty-t">No ${status}</div></div>`;
       return;
     }
-    el.innerHTML=data.map(s => {
+
+    const reorderBar = status === 'approved' ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem;flex-wrap:wrap;gap:.5rem">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">${reorderMode ? 'Use arrows to set stick order' : 'Approved Carvings'}</div>
+        <button class="an-refresh" onclick="toggleReorderMode()">${reorderMode ? '✓ Done Reordering' : '⇕ Reorder Stick'}</button>
+      </div>` : '';
+
+    el.innerHTML = reorderBar + data.map((s, idx) => {
       const dname = buildDisplayName(s);
       const meta  = [s.age ? 'Age '+s.age : '', s.state || '', s.affiliation || ''].filter(Boolean).join(' · ');
       return `<div class="ac" id="ac-${s.id}">
         ${s.image_url?`<img class="ac-img" src="${esc(s.image_url)}" alt="${esc(dname)}" onclick="openLightbox('${esc(s.image_url)}')">`:'<div class="ac-img-ph">🎨</div>'}
         <div class="ac-body">
+          ${reorderMode ? `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.625rem;padding-bottom:.625rem;border-bottom:1px solid var(--gold-border)">
+            <button class="an-refresh" style="padding:4px 10px" onclick="moveCarving('${s.id}',${idx},'up')" ${idx===0?'disabled':''}>▲</button>
+            <button class="an-refresh" style="padding:4px 10px" onclick="moveCarving('${s.id}',${idx},'down')" ${idx===data.length-1?'disabled':''}>▼</button>
+            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);letter-spacing:1px">Position ${idx+1} of ${data.length}</span>
+          </div>` : ''}
           <span class="badge badge-${s.status}">${s.status}</span>
           <div class="ac-name" id="disp-name-${s.id}">${esc(dname)}</div>
           <div class="ac-meta" id="disp-meta-${s.id}">${esc(meta)} · ${new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
