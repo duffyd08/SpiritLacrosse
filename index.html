@@ -1888,28 +1888,28 @@ async function loadStick() {
     stickBgMap = new Map();
     stickCurrentPage = 0;
 
-    // Only process images for the FIRST page right now — render ASAP
-    const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-    const firstPageItems = allStickData.slice(0, itemsPerPage);
+    // Pull any session-cached processed images so repeat visits are instant
+    loadBgCacheFromSession();
 
-    if (subText) subText.textContent = `Processing ${firstPageItems.length} carvings…`;
-    let done = 0;
-    await Promise.all(firstPageItems.map(s =>
-      removeBg(s.image_url).then(d => {
-        done++;
-        if (subText) subText.textContent = `${done} of ${firstPageItems.length} carvings ready…`;
-        stickBgMap.set(s.image_url, d);
-      })
-    ));
-
-    renderStickPage();
-    const loadNote = document.getElementById('stick-load-note');
-    if (loadNote) loadNote.classList.add('hidden');
+    // Render immediately with raw images (or cached processed ones) — no waiting
     if (toast) toast.classList.remove('show');
+    const loadNote = document.getElementById('stick-load-note');
+    if (loadNote) loadNote.classList.remove('hidden');
+    renderStickPage();
+
+    // Process the first page's images in small concurrency-limited batches,
+    // re-rendering as each batch completes so carvings "pop in" smoothly
+    const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+    const firstPageItems = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+
+    if (firstPageItems.length) {
+      await processStickBgQueue(firstPageItems, 3, true);
+    }
+    if (loadNote) loadNote.classList.add('hidden');
 
     // Process remaining pages' images in the background, low priority
-    const rest = allStickData.slice(itemsPerPage);
-    if (rest.length) processStickBgQueue(rest);
+    const rest = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    if (rest.length) processStickBgQueue(rest, 3, false);
 
   } catch(e) {
     if (toast) toast.classList.remove('show');
@@ -1917,27 +1917,62 @@ async function loadStick() {
   }
 }
 
-// Process remaining images in small batches without blocking the UI
-function processStickBgQueue(items, batchSize = 6) {
-  let i = 0;
-  function next() {
-    if (i >= items.length) return;
-    const batch = items.slice(i, i + batchSize);
-    i += batchSize;
-    Promise.all(batch.map(s =>
-      removeBg(s.image_url).then(d => stickBgMap.set(s.image_url, d))
-    )).then(() => {
-      // If the user has navigated to a page containing these items, re-render
-      const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-      const start = stickCurrentPage * itemsPerPage;
-      const pageItems = allStickData.slice(start, start + itemsPerPage);
-      const needsRefresh = pageItems.some(p => batch.includes(p));
-      if (needsRefresh) renderStickPage();
-      // Yield to the browser before continuing
-      requestIdleCallback ? requestIdleCallback(next, {timeout:1000}) : setTimeout(next, 50);
+// Save/restore processed (background-removed) images for this session so
+// repeat visits to the stick page don't reprocess everything from scratch
+const BG_CACHE_KEY = 'spirit_stick_bg_cache_v1';
+function loadBgCacheFromSession() {
+  try {
+    const raw = sessionStorage.getItem(BG_CACHE_KEY);
+    if (!raw) return;
+    const obj = JSON.parse(raw);
+    Object.entries(obj).forEach(([k,v]) => stickBgMap.set(k, v));
+  } catch(e) { /* ignore */ }
+}
+function saveBgCacheToSession() {
+  try {
+    const obj = {};
+    stickBgMap.forEach((v,k) => {
+      // Only persist actual processed results (data URLs), not raw fallbacks
+      if (typeof v === 'string' && v.startsWith('data:')) obj[k] = v;
     });
-  }
-  next();
+    sessionStorage.setItem(BG_CACHE_KEY, JSON.stringify(obj));
+  } catch(e) { /* storage full or unavailable — ignore */ }
+}
+
+// Process images in small concurrency-limited batches without blocking the UI.
+// If `rerenderEachBatch` is true, the visible page re-renders after each batch
+// so carvings appear progressively. Returns a promise that resolves once the
+// given items are all processed.
+function processStickBgQueue(items, batchSize = 3, rerenderEachBatch = true) {
+  let i = 0;
+  return new Promise(resolveAll => {
+    function next() {
+      if (i >= items.length) { saveBgCacheToSession(); resolveAll(); return; }
+      const batch = items.slice(i, i + batchSize);
+      i += batchSize;
+      Promise.all(batch.map(s =>
+        removeBg(s.image_url).then(d => stickBgMap.set(s.image_url, d))
+      )).then(() => {
+        if (rerenderEachBatch) {
+          const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+          const start = stickCurrentPage * itemsPerPage;
+          const pageItems = allStickData.slice(start, start + itemsPerPage);
+          const needsRefresh = pageItems.some(p => batch.includes(p));
+          if (needsRefresh) renderStickPage();
+        } else {
+          // Even for background pages, refresh if user navigated there
+          const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+          const start = stickCurrentPage * itemsPerPage;
+          const pageItems = allStickData.slice(start, start + itemsPerPage);
+          const needsRefresh = pageItems.some(p => batch.includes(p));
+          if (needsRefresh) renderStickPage();
+        }
+        // Yield to the browser before continuing
+        requestIdleCallback ? requestIdleCallback(next, {timeout:1000}) : setTimeout(next, 50);
+      });
+    }
+    next();
+  });
 }
 
 function renderStickPage() {
@@ -2004,7 +2039,13 @@ function removeBg(src) {
         }
         ctx.putImageData(id,0,0);
         if (canvas instanceof OffscreenCanvas) {
-          canvas.convertToBlob({type:'image/png'}).then(blob => resolve(URL.createObjectURL(blob))).catch(()=>resolve(src));
+          canvas.convertToBlob({type:'image/png'}).then(blob => {
+            // Convert blob to a data URL so it's cacheable in sessionStorage
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => resolve(src);
+            reader.readAsDataURL(blob);
+          }).catch(()=>resolve(src));
         } else {
           resolve(canvas.toDataURL('image/png'));
         }
