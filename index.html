@@ -645,6 +645,76 @@ select.fi option{background:var(--navy2)}
   .viewer-arrow.right{right:6px}
 }
 
+/* REORDER PANEL */
+#reorder-modal{
+  position:fixed;inset:0;z-index:900;
+  background:rgba(4,9,18,.97);
+  display:none;flex-direction:column;
+  overflow:hidden;
+}
+#reorder-modal.open{display:flex}
+#reorder-topbar{
+  flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
+  padding:.75rem 1rem;border-bottom:1px solid var(--gold-border);
+  background:rgba(13,30,53,.9);
+}
+#reorder-title{font-family:'Anton',sans-serif;font-size:16px;letter-spacing:2px;color:var(--gold);text-transform:uppercase}
+#reorder-hint{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.5px;color:var(--muted);padding:.5rem 1rem;text-align:center;border-bottom:1px solid var(--gold-border);background:rgba(13,30,53,.6)}
+#reorder-grid-wrap{flex:1;overflow-y:auto;padding:1rem}
+#reorder-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
+  gap:10px;
+}
+.reorder-tile{
+  position:relative;
+  aspect-ratio:1/1;
+  border-radius:var(--r);
+  overflow:hidden;
+  border:2px solid var(--gold-border);
+  cursor:grab;
+  background:#0d1e35;
+  touch-action:none;
+  transition:transform .15s, box-shadow .15s, border-color .15s;
+}
+.reorder-tile img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+.reorder-tile .reorder-num{
+  position:absolute;top:4px;left:4px;
+  background:rgba(7,17,31,.85);color:var(--gold);
+  font-family:'Anton',sans-serif;font-size:13px;letter-spacing:1px;
+  padding:2px 8px;border-radius:var(--r);
+  border:1px solid var(--gold-border);
+  pointer-events:none;
+}
+.reorder-tile .reorder-name{
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(180deg,transparent,rgba(0,0,0,.85));
+  color:var(--white);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.5px;
+  padding:10px 6px 5px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  pointer-events:none;
+}
+.reorder-tile.dragging{
+  opacity:.4;
+  border-color:var(--gold);
+  box-shadow:0 0 0 2px var(--gold);
+  transform:scale(0.96);
+}
+.reorder-tile.drag-over{
+  border-color:var(--gold);
+  box-shadow:0 0 0 3px rgba(232,184,75,.5);
+}
+#reorder-bottombar{
+  flex-shrink:0;padding:.75rem 1rem;
+  background:rgba(13,30,53,.9);border-top:1px solid var(--gold-border);
+  display:flex;gap:8px;align-items:center;justify-content:space-between;
+}
+#reorder-status{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.5px}
+#reorder-close{padding:10px 24px;background:var(--gold);color:var(--navy);border:none;border-radius:var(--r);font-family:'Anton',sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:background .15s}
+#reorder-close:hover{background:var(--gold2)}
+
+#reorder-x-close{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:var(--white);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+#reorder-x-close:hover{background:rgba(255,255,255,.2)}
+
 /* ADMIN CROP MODAL */
 #acrop-modal{
   position:fixed;inset:0;z-index:800;
@@ -1434,12 +1504,6 @@ const ADMIN_PW = 'Navy984**$$';
 const RESEND_KEY = 're_13iqwVbt_WwsxGLX3mi9ujbns7SYXzGgk';
 
 let sb = null, selFile = null, curAdminStatus = 'pending';
-let reorderMode = false;
-
-function toggleReorderMode() {
-  reorderMode = !reorderMode;
-  loadAdmin('approved', document.querySelector('.atab.active'));
-}
 let allApproved = [], cache = {};
 
 // ── COVER IMAGE (base64 embedded) ──────────────────────
@@ -2330,38 +2394,8 @@ function checkPw() {
 }
 
 // ── ADMIN ──────────────────────────────────────────────
-async function moveCarving(id, idx, direction) {
-  try {
-    // Fetch current approved list in current order
-    const { data, error } = await sb.from('illustrations').select('id,sort_order').eq('status','approved').order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
-    if (error) throw error;
-
-    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= data.length) return;
-
-    // Assign sequential sort_order values 0..n-1 based on current order,
-    // then swap the two positions being moved.
-    const ordered = data.map((s, i) => ({ id: s.id, sort_order: i }));
-    const a = ordered[idx];
-    const b = ordered[targetIdx];
-    const tmp = a.sort_order;
-    a.sort_order = b.sort_order;
-    b.sort_order = tmp;
-
-    // Persist all sort_order values (cheap for typical gallery sizes)
-    await Promise.all(ordered.map(o =>
-      sb.from('illustrations').update({ sort_order: o.sort_order }).eq('id', o.id)
-    ));
-
-    loadAdmin('approved', document.querySelector('.atab.active'));
-  } catch(e) {
-    alert('Reorder failed: ' + e.message);
-  }
-}
-
 async function loadAdmin(status, btnEl) {
   curAdminStatus = status;
-  if (status !== 'approved') reorderMode = false;
   document.querySelectorAll('.atab').forEach(b=>b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
   const el = document.getElementById('admin-out');
@@ -2384,8 +2418,8 @@ async function loadAdmin(status, btnEl) {
 
     const reorderBar = status === 'approved' ? `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem;flex-wrap:wrap;gap:.5rem">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">${reorderMode ? 'Use arrows to set stick order' : 'Approved Carvings'}</div>
-        <button class="an-refresh" onclick="toggleReorderMode()">${reorderMode ? '✓ Done Reordering' : '⇕ Reorder Stick'}</button>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">Approved Carvings</div>
+        <button class="an-refresh" onclick="openReorderPanel()">⇕ Reorder Stick</button>
       </div>` : '';
 
     el.innerHTML = reorderBar + data.map((s, idx) => {
@@ -2394,12 +2428,6 @@ async function loadAdmin(status, btnEl) {
       return `<div class="ac" id="ac-${s.id}">
         ${s.image_url?`<img class="ac-img" src="${esc(s.image_url)}" alt="${esc(dname)}" onclick="openLightbox('${esc(s.image_url)}')">`:'<div class="ac-img-ph">🎨</div>'}
         <div class="ac-body">
-          ${reorderMode ? `
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.625rem;padding-bottom:.625rem;border-bottom:1px solid var(--gold-border)">
-            <button class="an-refresh" style="padding:4px 10px" onclick="moveCarving('${s.id}',${idx},'up')" ${idx===0?'disabled':''}>▲</button>
-            <button class="an-refresh" style="padding:4px 10px" onclick="moveCarving('${s.id}',${idx},'down')" ${idx===data.length-1?'disabled':''}>▼</button>
-            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);letter-spacing:1px">Position ${idx+1} of ${data.length}</span>
-          </div>` : ''}
           <span class="badge badge-${s.status}">${s.status}</span>
           <div class="ac-name" id="disp-name-${s.id}">${esc(dname)}</div>
           <div class="ac-meta" id="disp-meta-${s.id}">${esc(meta)} · ${new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
@@ -2553,6 +2581,173 @@ async function saveEdit(id) {
     if (errEl) { errEl.textContent = '⚠ '+error.message; errEl.style.display = 'block'; }
     if (btn) btn.textContent = 'Save Changes';
   }
+}
+
+// ── REORDER PANEL ───────────────────────────────────────
+let reorderItems = []; // [{id, image_url, display_name, sort_order}]
+let reorderDragEl = null;
+let reorderDragId = null;
+
+async function openReorderPanel() {
+  const modal = document.getElementById('reorder-modal');
+  const grid  = document.getElementById('reorder-grid');
+  const statusEl = document.getElementById('reorder-status');
+  modal.classList.add('open');
+  grid.innerHTML = '<div class="loading"><div class="spin"></div></div>';
+  statusEl.textContent = 'Loading…';
+
+  try {
+    const { data, error } = await sb.from('illustrations').select('id,image_url,first_name,last_name,name,display_name,age,sort_order').eq('status','approved').order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
+    if (error) throw error;
+    reorderItems = data.filter(s => s.image_url);
+    renderReorderGrid();
+    statusEl.textContent = `${reorderItems.length} carvings — drag to reorder`;
+  } catch(e) {
+    grid.innerHTML = `<div class="empty"><div class="empty-t">Error: ${e.message}</div></div>`;
+  }
+}
+
+function closeReorderPanel() {
+  document.getElementById('reorder-modal').classList.remove('open');
+  // Refresh the approved list behind the scenes to reflect new order
+  if (curAdminStatus === 'approved') {
+    loadAdmin('approved', document.querySelector('.atab.active'));
+  }
+}
+
+function renderReorderGrid() {
+  const grid = document.getElementById('reorder-grid');
+  grid.innerHTML = reorderItems.map((s, i) => {
+    const dname = s.display_name || buildDisplayName(s);
+    return `<div class="reorder-tile" draggable="true" data-id="${s.id}" data-idx="${i}">
+      <img src="${esc(s.image_url)}" alt="${esc(dname)}">
+      <div class="reorder-num">${i+1}</div>
+      <div class="reorder-name">${esc(dname)}</div>
+    </div>`;
+  }).join('');
+
+  // Bind drag events to each tile
+  grid.querySelectorAll('.reorder-tile').forEach(tile => {
+    tile.addEventListener('dragstart', onReorderDragStart);
+    tile.addEventListener('dragend', onReorderDragEnd);
+    tile.addEventListener('dragover', onReorderDragOver);
+    tile.addEventListener('dragleave', onReorderDragLeave);
+    tile.addEventListener('drop', onReorderDrop);
+
+    // Touch support via pointer events (mobile drag-and-drop fallback)
+    tile.addEventListener('pointerdown', onReorderPointerDown);
+  });
+}
+
+function onReorderDragStart(ev) {
+  reorderDragId = ev.currentTarget.dataset.id;
+  ev.currentTarget.classList.add('dragging');
+  ev.dataTransfer.effectAllowed = 'move';
+}
+function onReorderDragEnd(ev) {
+  ev.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.reorder-tile').forEach(t => t.classList.remove('drag-over'));
+}
+function onReorderDragOver(ev) {
+  ev.preventDefault();
+  ev.currentTarget.classList.add('drag-over');
+}
+function onReorderDragLeave(ev) {
+  ev.currentTarget.classList.remove('drag-over');
+}
+function onReorderDrop(ev) {
+  ev.preventDefault();
+  ev.currentTarget.classList.remove('drag-over');
+  const targetId = ev.currentTarget.dataset.id;
+  if (!reorderDragId || reorderDragId === targetId) return;
+  reorderSwap(reorderDragId, targetId);
+}
+
+function reorderSwap(draggedId, targetId) {
+  const fromIdx = reorderItems.findIndex(s => s.id === draggedId);
+  const toIdx   = reorderItems.findIndex(s => s.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = reorderItems.splice(fromIdx, 1);
+  reorderItems.splice(toIdx, 0, moved);
+  renderReorderGrid();
+  persistReorder();
+}
+
+async function persistReorder() {
+  const statusEl = document.getElementById('reorder-status');
+  statusEl.textContent = 'Saving…';
+  try {
+    await Promise.all(reorderItems.map((s, i) =>
+      sb.from('illustrations').update({ sort_order: i }).eq('id', s.id)
+    ));
+    reorderItems.forEach((s, i) => { s.sort_order = i; if (cache[s.id]) cache[s.id].sort_order = i; });
+    statusEl.textContent = `${reorderItems.length} carvings — order saved ✓`;
+  } catch(e) {
+    statusEl.textContent = 'Save failed: ' + e.message;
+  }
+}
+
+// ── Touch / pointer-based drag-and-drop (mobile) ──
+let reorderPointerStartX = 0, reorderPointerStartY = 0;
+let reorderPointerTile = null;
+let reorderPointerActive = false;
+
+function onReorderPointerDown(ev) {
+  if (ev.pointerType === 'mouse') return; // mouse uses native HTML5 drag
+  reorderPointerTile = ev.currentTarget;
+  reorderPointerStartX = ev.clientX;
+  reorderPointerStartY = ev.clientY;
+  reorderPointerActive = false;
+
+  const onMove = (e) => {
+    const dx = e.clientX - reorderPointerStartX;
+    const dy = e.clientY - reorderPointerStartY;
+    if (!reorderPointerActive && Math.hypot(dx, dy) > 8) {
+      reorderPointerActive = true;
+      reorderDragId = reorderPointerTile.dataset.id;
+      reorderPointerTile.classList.add('dragging');
+    }
+    if (reorderPointerActive) {
+      e.preventDefault();
+      reorderPointerTile.style.transform = `translate(${dx}px,${dy}px) scale(0.96)`;
+      reorderPointerTile.style.zIndex = '10';
+      reorderPointerTile.style.position = 'relative';
+      reorderPointerTile.style.pointerEvents = 'none';
+
+      // Find tile under pointer
+      const elUnder = document.elementFromPoint(e.clientX, e.clientY);
+      document.querySelectorAll('.reorder-tile').forEach(t => t.classList.remove('drag-over'));
+      const tileUnder = elUnder?.closest('.reorder-tile');
+      if (tileUnder && tileUnder !== reorderPointerTile) {
+        tileUnder.classList.add('drag-over');
+      }
+    }
+  };
+
+  const onUp = (e) => {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    if (reorderPointerActive) {
+      reorderPointerTile.style.transform = '';
+      reorderPointerTile.style.zIndex = '';
+      reorderPointerTile.style.position = '';
+      reorderPointerTile.style.pointerEvents = '';
+      reorderPointerTile.classList.remove('dragging');
+
+      const elUnder = document.elementFromPoint(e.clientX, e.clientY);
+      const tileUnder = elUnder?.closest('.reorder-tile');
+      document.querySelectorAll('.reorder-tile').forEach(t => t.classList.remove('drag-over'));
+      if (tileUnder && tileUnder.dataset.id !== reorderDragId) {
+        reorderSwap(reorderDragId, tileUnder.dataset.id);
+      }
+    }
+    reorderDragId = null;
+    reorderPointerActive = false;
+    reorderPointerTile = null;
+  };
+
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
 }
 
 // ── ADMIN IMAGE CROP ───────────────────────────────────
@@ -3506,6 +3701,20 @@ function openLightbox(url){ document.getElementById('lightbox-img').src=url; doc
 function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); document.getElementById('lightbox-img').src=''; }
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 </script>
+<div id="reorder-modal">
+  <div id="reorder-topbar">
+    <div id="reorder-title">⇕ Reorder Stick</div>
+    <button id="reorder-x-close" onclick="closeReorderPanel()">✕</button>
+  </div>
+  <div id="reorder-hint">Drag tiles to set the order carvings appear on the stick — changes save as you go</div>
+  <div id="reorder-grid-wrap">
+    <div id="reorder-grid"></div>
+  </div>
+  <div id="reorder-bottombar">
+    <div id="reorder-status">Drag to reorder</div>
+    <button id="reorder-close" onclick="closeReorderPanel()">✓ Done</button>
+  </div>
+</div>
 <div id="acrop-modal">
   <div id="acrop-topbar">
     <div id="acrop-title">✂ Crop Image</div>
