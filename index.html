@@ -1797,8 +1797,15 @@ function populateAffiliationFilter(data) {
   sel.innerHTML = '<option value="">All Affiliations</option>' + affs.map(a=>`<option value="${esc(a)}"${a===current?'selected':''}>${esc(a)}</option>`).join('');
   const locSel = document.getElementById('filter-state');
   const locCurrent = locSel.value;
-  const locs = [...new Set(data.map(s=>s.state).filter(Boolean))].sort();
-  locSel.innerHTML = '<option value="">All Locations</option>' + locs.map(l=>`<option value="${esc(l)}"${l===locCurrent?'selected':''}>${esc(l)}</option>`).join('');
+  const locs = [...new Set(data.map(s=>s.state).filter(Boolean))].sort((a,b) => {
+    const an = STATE_MAP[(a||'').toUpperCase()] || a;
+    const bn = STATE_MAP[(b||'').toUpperCase()] || b;
+    return an.localeCompare(bn);
+  });
+  locSel.innerHTML = '<option value="">All Locations</option>' + locs.map(l=>{
+    const full = STATE_MAP[(l||'').toUpperCase()] || l;
+    return `<option value="${esc(l)}"${l===locCurrent?'selected':''}>${esc(full)}</option>`;
+  }).join('');
 }
 
 function applyFilters() {
@@ -1878,30 +1885,59 @@ async function loadStick() {
     if (!allStickData.length) { emptyDiv.style.display='block'; if (toast) toast.classList.remove('show'); return; }
     emptyDiv.style.display = 'none';
 
-    if (subText) subText.textContent = `Processing ${allStickData.length} carvings…`;
-
-    // Fetch + process all images in parallel, then render everything at once
-    let done = 0;
-    const entries = await Promise.all(
-      allStickData.filter(s=>s.image_url).map(s =>
-        removeBg(s.image_url).then(d => {
-          done++;
-          if (subText) subText.textContent = `${done} of ${allStickData.length} carvings ready…`;
-          return [s.image_url, d];
-        })
-      )
-    );
-    stickBgMap = new Map(entries);
+    stickBgMap = new Map();
     stickCurrentPage = 0;
+
+    // Only process images for the FIRST page right now — render ASAP
+    const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+    const firstPageItems = allStickData.slice(0, itemsPerPage);
+
+    if (subText) subText.textContent = `Processing ${firstPageItems.length} carvings…`;
+    let done = 0;
+    await Promise.all(firstPageItems.map(s =>
+      removeBg(s.image_url).then(d => {
+        done++;
+        if (subText) subText.textContent = `${done} of ${firstPageItems.length} carvings ready…`;
+        stickBgMap.set(s.image_url, d);
+      })
+    ));
+
     renderStickPage();
     const loadNote = document.getElementById('stick-load-note');
     if (loadNote) loadNote.classList.add('hidden');
     if (toast) toast.classList.remove('show');
 
+    // Process remaining pages' images in the background, low priority
+    const rest = allStickData.slice(itemsPerPage);
+    if (rest.length) processStickBgQueue(rest);
+
   } catch(e) {
     if (toast) toast.classList.remove('show');
     console.warn('Stick error:', e);
   }
+}
+
+// Process remaining images in small batches without blocking the UI
+function processStickBgQueue(items, batchSize = 6) {
+  let i = 0;
+  function next() {
+    if (i >= items.length) return;
+    const batch = items.slice(i, i + batchSize);
+    i += batchSize;
+    Promise.all(batch.map(s =>
+      removeBg(s.image_url).then(d => stickBgMap.set(s.image_url, d))
+    )).then(() => {
+      // If the user has navigated to a page containing these items, re-render
+      const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+      const start = stickCurrentPage * itemsPerPage;
+      const pageItems = allStickData.slice(start, start + itemsPerPage);
+      const needsRefresh = pageItems.some(p => batch.includes(p));
+      if (needsRefresh) renderStickPage();
+      // Yield to the browser before continuing
+      requestIdleCallback ? requestIdleCallback(next, {timeout:1000}) : setTimeout(next, 50);
+    });
+  }
+  next();
 }
 
 function renderStickPage() {
@@ -1944,7 +1980,7 @@ function removeBg(src) {
     img.crossOrigin = 'anonymous';
     const process = () => {
       try {
-        const S = 400;
+        const S = 240;
         let canvas, ctx;
         if (typeof OffscreenCanvas !== 'undefined') {
           canvas = new OffscreenCanvas(S, S);
@@ -2157,8 +2193,8 @@ async function loadLibrary() {
     if (!data.length) { el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-t">Nothing yet</div></div>'; return; }
     el.innerHTML = data.map((s, i) => {
       const dname = buildDisplayName(s);
-      const meta  = [s.age ? 'Age '+s.age : '', s.state || '', s.affiliation || ''].filter(Boolean).join(' · ');
-      const dateStr = new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const stateFull = STATE_MAP[(s.state||'').toUpperCase()] || s.state || '';
+      const meta  = [s.age ? 'Age '+s.age : '', stateFull, s.affiliation || ''].filter(Boolean).join(' · ');
       return `<div class="r-card">
         <div class="r-card-inner">
           <div class="r-img-col">
