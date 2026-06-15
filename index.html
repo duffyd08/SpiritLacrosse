@@ -2360,6 +2360,7 @@ async function doSubmit() {
       description: desc,
       email: email || null,
       image_url: urlD.publicUrl,
+      device: getDeviceType(),
       status: 'pending'
     }]);
     if (insErr) throw insErr;
@@ -2437,12 +2438,14 @@ async function loadAdmin(status, btnEl) {
     el.innerHTML = reorderBar + data.map((s, idx) => {
       const dname = buildDisplayName(s);
       const meta  = [s.age ? 'Age '+s.age : '', s.state || '', s.affiliation || ''].filter(Boolean).join(' · ');
+      const deviceIcon = s.device === 'mobile' ? '📱' : s.device === 'tablet' ? '📲' : s.device === 'desktop' ? '💻' : null;
+      const deviceLabel = deviceIcon ? `${deviceIcon} ${s.device.charAt(0).toUpperCase()+s.device.slice(1)}` : null;
       return `<div class="ac" id="ac-${s.id}">
         ${s.image_url?`<img class="ac-img" src="${esc(s.image_url)}" alt="${esc(dname)}" onclick="openLightbox('${esc(s.image_url)}')">`:'<div class="ac-img-ph">🎨</div>'}
         <div class="ac-body">
           <span class="badge badge-${s.status}">${s.status}</span>
           <div class="ac-name" id="disp-name-${s.id}">${esc(dname)}</div>
-          <div class="ac-meta" id="disp-meta-${s.id}">${esc(meta)} · ${new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+          <div class="ac-meta" id="disp-meta-${s.id}">${esc(meta)} · ${new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}${deviceLabel ? ' · '+deviceLabel : ''}</div>
           ${s.email?`<div class="ac-email" id="disp-email-${s.id}">✉ ${esc(s.email)}</div>`:`<div class="ac-email" id="disp-email-${s.id}" style="display:none"></div>`}
           <div class="ac-desc" id="desc-${s.id}">${esc(s.description)}</div>
 
