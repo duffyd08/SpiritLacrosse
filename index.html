@@ -2511,11 +2511,32 @@ async function decide(id, status) {
   if (!error){
     if (status === 'approved' && s) {
       sendApprovalEmail(buildDisplayName(s), s.state||'', s.description||'', s.image_url||'');
+      // New approval becomes #1 on the stick: shift existing sort_order values down by 1
+      await promoteToFront(id);
     }
     const c=document.getElementById('ac-'+id);
     if(c) c.style.opacity='0.25';
     setTimeout(()=>loadAdmin(curAdminStatus,null),500);
     updatePendingCount();
+  }
+}
+
+async function promoteToFront(newId) {
+  try {
+    // Fetch current approved order (excluding the new item)
+    const { data, error } = await sb.from('illustrations').select('id,sort_order').eq('status','approved').order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
+    if (error) throw error;
+
+    const others = data.filter(s => s.id !== newId);
+    // Assign sort_order: new item = 0, everyone else shifts down by 1 (1,2,3...)
+    const updates = [{ id: newId, sort_order: 0 }];
+    others.forEach((s, i) => updates.push({ id: s.id, sort_order: i + 1 }));
+
+    await Promise.all(updates.map(u =>
+      sb.from('illustrations').update({ sort_order: u.sort_order }).eq('id', u.id)
+    ));
+  } catch(e) {
+    console.warn('promoteToFront failed:', e);
   }
 }
 
