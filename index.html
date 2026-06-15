@@ -663,8 +663,14 @@ select.fi option{background:var(--navy2)}
 #reorder-grid-wrap{flex:1;overflow-y:auto;padding:1rem}
 #reorder-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(110px,1fr));
-  gap:10px;
+  grid-template-columns:repeat(10,1fr);
+  gap:8px;
+}
+@media(max-width:900px){
+  #reorder-grid{grid-template-columns:repeat(5,1fr)}
+}
+@media(max-width:520px){
+  #reorder-grid{grid-template-columns:repeat(3,1fr)}
 }
 .reorder-tile{
   position:relative;
@@ -692,6 +698,12 @@ select.fi option{background:var(--navy2)}
   color:var(--white);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.5px;
   padding:10px 6px 5px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   pointer-events:none;
+}
+.reorder-row-break{
+  grid-column:1/-1;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold-border) 10%,var(--gold-border) 90%,transparent);
+  margin:4px 0;
 }
 .reorder-tile.dragging{
   opacity:.4;
@@ -2619,7 +2631,8 @@ function renderReorderGrid() {
   const grid = document.getElementById('reorder-grid');
   grid.innerHTML = reorderItems.map((s, i) => {
     const dname = s.display_name || buildDisplayName(s);
-    return `<div class="reorder-tile" draggable="true" data-id="${s.id}" data-idx="${i}">
+    const rowBreak = (i > 0 && i % 10 === 0) ? `<div class="reorder-row-break"></div>` : '';
+    return `${rowBreak}<div class="reorder-tile" draggable="true" data-id="${s.id}" data-idx="${i}">
       <img src="${esc(s.image_url)}" alt="${esc(dname)}">
       <div class="reorder-num">${i+1}</div>
       <div class="reorder-name">${esc(dname)}</div>
