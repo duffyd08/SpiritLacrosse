@@ -1884,9 +1884,10 @@ async function preloadStick() {
     loadBgCacheFromSession();
 
     // Process first page's images in background (small batches, idle-priority)
+    // Skip any that already have a pre-saved transparent_url
     const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
-    const rest      = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !s.transparent_url && !stickBgMap.has(s.image_url));
+    const rest      = allStickData.slice(itemsPerPage).filter(s => !s.transparent_url && !stickBgMap.has(s.image_url));
     if (firstPage.length) processStickBgQueue(firstPage, 3, false);
     if (rest.length)      processStickBgQueue(rest, 2, false);
   } catch(e) { /* silent — preload is best-effort */ }
@@ -1910,9 +1911,10 @@ async function loadStick() {
     stickCurrentPage = 0;
     renderStickPage();
     // Continue any background canvas processing that isn't done yet
+    // Skip images that already have a pre-saved transparent_url
     const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
-    const rest      = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !s.transparent_url && !stickBgMap.has(s.image_url));
+    const rest      = allStickData.slice(itemsPerPage).filter(s => !s.transparent_url && !stickBgMap.has(s.image_url));
     if (firstPage.length) processStickBgQueue(firstPage, 4, true);
     if (rest.length)      processStickBgQueue(rest, 3, false);
     return;
@@ -1938,8 +1940,8 @@ async function loadStick() {
     renderStickPage();
 
     const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
-    const rest      = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !s.transparent_url && !stickBgMap.has(s.image_url));
+    const rest      = allStickData.slice(itemsPerPage).filter(s => !s.transparent_url && !stickBgMap.has(s.image_url));
     if (firstPage.length) processStickBgQueue(firstPage, 4, true);
     if (rest.length)      processStickBgQueue(rest, 3, false);
 
@@ -2146,7 +2148,8 @@ function renderSticks(items, isSearch, bgMap = new Map()) {
       div.style.width  = PHOTO_W + 'px';
       div.style.height = PHOTO_H + 'px';
       div.dataset.id   = s.id;
-      const resolvedSrc = bgMap.get(s.image_url) || s.image_url;
+      // Priority: pre-processed transparent URL → canvas-processed → raw
+      const resolvedSrc = s.transparent_url || bgMap.get(s.image_url) || s.image_url;
       div.innerHTML = `<img src="${esc(resolvedSrc)}" alt="${esc(buildDisplayName(s))}">`;
       div.title = buildDisplayName(s);
       div.onclick = () => openModal(s);
@@ -2545,8 +2548,13 @@ async function loadAdmin(status, btnEl) {
     const reorderBar = status === 'approved' ? `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem;flex-wrap:wrap;gap:.5rem">
         <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase">Approved Carvings</div>
-        <button class="an-refresh" onclick="openReorderPanel()">⇕ Reorder Stick</button>
-      </div>` : '';
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="an-refresh" onclick="openReorderPanel()">⇕ Reorder Stick</button>
+          <button class="an-refresh" id="backfill-btn" onclick="backfillTransparent()">🖼 Generate Transparent</button>
+        </div>
+      </div>
+      <div id="backfill-progress" style="display:none;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.5px;margin-bottom:.75rem;padding:.5rem .75rem;border-radius:var(--r);border:1px solid var(--gold-border);background:rgba(232,184,75,.06)"></div>
+      ` : '';
 
     el.innerHTML = reorderBar + data.map((s, idx) => {
       const dname = buildDisplayName(s);
@@ -2623,17 +2631,121 @@ async function loadAdmin(status, btnEl) {
 
 async function decide(id, status) {
   const s = cache[id];
+  const btn = document.querySelector(`#ac-${id} .btn-approve`);
+
   const {error} = await sb.from('illustrations').update({status}).eq('id',id);
   if (!error){
-    if (status === 'approved' && s) {
+    if (status === 'approved' && s && s.image_url) {
       sendApprovalEmail(buildDisplayName(s), s.state||'', s.description||'', s.image_url||'');
-      // New approval becomes #1 on the stick: shift existing sort_order values down by 1
       await promoteToFront(id);
+      // Generate transparent version and save it — runs once so visitors never have to
+      generateAndSaveTransparent(id, s.image_url);
     }
     const c=document.getElementById('ac-'+id);
     if(c) c.style.opacity='0.25';
     setTimeout(()=>loadAdmin(curAdminStatus,null),500);
     updatePendingCount();
+  }
+}
+
+// Backfill transparent versions for all approved carvings that don't have one yet
+async function backfillTransparent() {
+  const btn      = document.getElementById('backfill-btn');
+  const progress = document.getElementById('backfill-progress');
+  if (!btn || !progress) return;
+
+  const { data, error } = await sb.from('illustrations')
+    .select('id,image_url,transparent_url')
+    .eq('status','approved')
+    .is('transparent_url', null);
+
+  if (error) { alert('Fetch failed: ' + error.message); return; }
+
+  const todo = data.filter(s => s.image_url);
+  if (!todo.length) {
+    progress.style.display = 'block';
+    progress.textContent = '✓ All approved carvings already have a transparent version!';
+    setTimeout(() => { progress.style.display = 'none'; }, 4000);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating…';
+  progress.style.display = 'block';
+
+  let done = 0, failed = 0;
+  progress.textContent = `Processing 0 of ${todo.length}…`;
+
+  for (let i = 0; i < todo.length; i += 3) {
+    const batch = todo.slice(i, i + 3);
+    await Promise.all(batch.map(async s => {
+      try {
+        await generateAndSaveTransparent(s.id, s.image_url, true);
+        done++;
+      } catch(e) {
+        failed++;
+      }
+      progress.textContent = `Processing ${done + failed} of ${todo.length}… (${done} done${failed ? ', ' + failed + ' failed' : ''})`;
+    }));
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  progress.textContent = `✓ Done — ${done} transparent versions saved${failed ? `, ${failed} failed (CORS or network issue)` : ''}.`;
+  btn.disabled = false;
+  btn.textContent = '🖼 Generate Transparent';
+  setTimeout(() => loadAdmin('approved', document.querySelector('.atab.active')), 2000);
+}
+
+async function generateAndSaveTransparent(id, imageUrl, silent = false) {
+  try {
+    // Show a subtle indicator on the card (only when not running in silent/backfill mode)
+    if (!silent) {
+      const card = document.getElementById('ac-'+id);
+      if (card) {
+        const ind = document.createElement('div');
+        ind.id = 'transp-ind-'+id;
+        ind.style.cssText = 'font-family:"DM Mono",monospace;font-size:10px;letter-spacing:1px;color:var(--muted);margin-top:6px;padding:4px 8px;border-radius:var(--r);background:rgba(232,184,75,.08);border:1px solid var(--gold-border);display:inline-block';
+        ind.textContent = '⏳ Saving transparent version…';
+        card.querySelector('.ac-body')?.appendChild(ind);
+      }
+    }
+    // Run background removal (same canvas logic used on stick page)
+    const dataUrl = await removeBg(imageUrl);
+    if (!dataUrl || dataUrl === imageUrl) return; // CORS blocked or no change
+
+    // Convert data URL to a Blob for upload
+    const res  = await fetch(dataUrl);
+    const blob = await res.blob();
+
+    // Upload to Supabase storage as a PNG alongside the original
+    const fname = `transparent/${id}_transparent.png`;
+    // Remove old version if it exists (upsert)
+    await sb.storage.from('illustrations').remove([fname]);
+    const { error: upErr } = await sb.storage.from('illustrations').upload(fname, blob, {
+      contentType: 'image/png',
+      cacheControl: '31536000' // cache for 1 year
+    });
+    if (upErr) throw upErr;
+
+    const { data: urlD } = sb.storage.from('illustrations').getPublicUrl(fname);
+    if (!urlD?.publicUrl) throw new Error('No public URL');
+
+    // Save transparent_url to the database row
+    await sb.from('illustrations').update({ transparent_url: urlD.publicUrl }).eq('id', id);
+    if (cache[id]) cache[id].transparent_url = urlD.publicUrl;
+
+    if (!silent) {
+      const ind = document.getElementById('transp-ind-'+id);
+      if (ind) { ind.textContent = '✓ Transparent version saved'; ind.style.color = 'var(--gold)'; setTimeout(() => ind.remove(), 3000); }
+    }
+
+  } catch(e) {
+    console.warn('generateAndSaveTransparent failed:', e);
+    if (!silent) {
+      const ind = document.getElementById('transp-ind-'+id);
+      if (ind) { ind.textContent = '⚠ Transparent save failed (will process live)'; setTimeout(() => ind.remove(), 4000); }
+    }
+    // Non-fatal — stick page will fall back to canvas processing
   }
 }
 
