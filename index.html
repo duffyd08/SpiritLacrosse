@@ -1545,14 +1545,19 @@ const COVER_B64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBw
 // ── BOOT ───────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   sb = supabase.createClient(SB_URL, SB_KEY);
-  // Cover images embedded directly in src attributes
   const p = new URLSearchParams(location.search);
   const pg = p.get('page') || 'home';
   const viewId = p.get('view');
   nav(pg, true);
   loadHome();
   updatePendingCount();
+  // Silently preload stick data + process first page in background
+  // so the Stick page feels instant when the user navigates to it
+  setTimeout(preloadStick, 1500); // slight delay so home page loads first
   if (viewId) loadAndOpen(viewId);
+  // Preload stick data + start background canvas processing silently
+  // so the stick page is ready (or nearly ready) before the user taps it
+  if (pg !== 'stick') preloadStick();
 });
 
 // ── NAV ────────────────────────────────────────────────
@@ -1865,6 +1870,29 @@ let allStickData = []; // full approved list
 let stickCurrentPage = 0; // 0-indexed
 let stickBgMap = new Map();
 
+// Silently preload stick data and begin canvas processing in the background
+// so the Stick page is ready (or nearly ready) when the user navigates to it
+async function preloadStick() {
+  if (allStickData.length) return; // already loaded, nothing to do
+  try {
+    const { data, error } = await sb.from('illustrations').select('*').eq('status','approved').order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
+    if (error || !data) return;
+    data.forEach(s => cache[s.id] = s);
+    allStickData = data.filter(s => s.image_url);
+    if (!allStickData.length) return;
+
+    // Restore session cache first — may already have most images done
+    loadBgCacheFromSession();
+
+    // Process first page's images in background (small batches, idle-priority)
+    const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    const rest      = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    if (firstPage.length) processStickBgQueue(firstPage, 3, false);
+    if (rest.length)      processStickBgQueue(rest, 2, false);
+  } catch(e) { /* silent — preload is best-effort */ }
+}
+
 async function loadStick() {
   const container = document.getElementById('sticks-container');
   const emptyDiv  = document.getElementById('stick-empty');
@@ -1873,6 +1901,24 @@ async function loadStick() {
 
   const toast = document.getElementById('stick-loading-toast');
   const subText = document.getElementById('slt-sub-text');
+  const loadNote = document.getElementById('stick-load-note');
+
+  // If preloadStick already fetched the data, skip the network round-trip
+  // and render immediately — the stick will appear almost instantly
+  if (allStickData.length) {
+    if (toast) toast.classList.remove('show');
+    if (loadNote) loadNote.classList.add('hidden');
+    stickCurrentPage = 0;
+    renderStickPage();
+    // Continue any background canvas processing that isn't done yet
+    const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    const rest      = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    if (firstPage.length) processStickBgQueue(firstPage, 4, true);
+    if (rest.length)      processStickBgQueue(rest, 3, false);
+    return;
+  }
+
   if (toast) toast.classList.add('show');
   if (subText) subText.textContent = 'Fetching carvings…';
 
@@ -1885,20 +1931,13 @@ async function loadStick() {
     if (!allStickData.length) { emptyDiv.style.display='block'; if (toast) toast.classList.remove('show'); return; }
     emptyDiv.style.display = 'none';
 
-    stickBgMap = new Map();
-    stickCurrentPage = 0;
-
-    // Restore any session-cached canvas-processed images (prior visit this session)
     loadBgCacheFromSession();
 
-    // Render IMMEDIATELY — mix-blend-mode:multiply on the img handles white
-    // background blending against the wood shaft for free, no canvas wait needed
     if (toast) toast.classList.remove('show');
-    const loadNote = document.getElementById('stick-load-note');
     if (loadNote) loadNote.classList.add('hidden');
+    stickCurrentPage = 0;
     renderStickPage();
 
-    // Canvas-process in background for better edge cleanup — fully non-blocking
     const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
     const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
     const rest      = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
@@ -2691,6 +2730,35 @@ async function saveEdit(id) {
   } else {
     if (errEl) { errEl.textContent = '⚠ '+error.message; errEl.style.display = 'block'; }
     if (btn) btn.textContent = 'Save Changes';
+  }
+}
+
+// ── STICK PRELOAD ───────────────────────────────────────
+// Called on page init so data + canvas processing is already underway
+// by the time the user taps the Stick tab.
+async function preloadStick() {
+  try {
+    // Small delay so it doesn't compete with the home page load
+    await new Promise(r => setTimeout(r, 1200));
+    if (!sb) return;
+
+    const { data, error } = await sb.from('illustrations').select('*').eq('status','approved').order('sort_order',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false});
+    if (error || !data) return;
+
+    data.forEach(s => cache[s.id] = s);
+    // Only populate allStickData if the user hasn't already navigated to stick
+    if (!allStickData.length) {
+      allStickData = data.filter(s => s.image_url);
+    }
+
+    if (!stickBgMap) stickBgMap = new Map();
+    loadBgCacheFromSession();
+
+    // Process all images silently in small background batches
+    const toProcess = allStickData.filter(s => s.image_url && !stickBgMap.has(s.image_url));
+    if (toProcess.length) processStickBgQueue(toProcess, 3, false);
+  } catch(e) {
+    // Silent — preload failure is non-critical
   }
 }
 
