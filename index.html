@@ -942,6 +942,7 @@ select.fi option{background:var(--navy2)}
     #7a5630 100%
   );
   position:relative;
+  isolation:isolate;
   box-shadow:0 6px 24px rgba(0,0,0,.45), inset 0 5px 8px rgba(220,180,120,.25), inset 0 -5px 8px rgba(40,18,2,.45);
   overflow:visible;
 }
@@ -970,15 +971,13 @@ select.fi option{background:var(--navy2)}
   transition:transform .2s,filter .2s;
   background:transparent;
   position:absolute;
-  z-index:3;
 }
-.shaft-photo:hover{transform:scale(1.08) !important;z-index:10;filter:drop-shadow(0 0 6px rgba(232,184,75,.6))}
+.shaft-photo:hover{transform:scale(1.08) !important;filter:drop-shadow(0 0 6px rgba(232,184,75,.6))}
 .shaft-photo img{
   width:100%;height:100%;
   object-fit:contain;
   display:block;
   mix-blend-mode:multiply;
-  filter:none;
 }
 .shaft-photo-above{position:relative}
 .shaft-photo-below{position:relative}
@@ -1973,10 +1972,9 @@ function saveBgCacheToSession() {
 }
 
 // Process images in small concurrency-limited batches without blocking the UI.
-// If `rerenderEachBatch` is true, the visible page re-renders after each batch
-// so carvings appear progressively. Returns a promise that resolves once the
-// given items are all processed.
-function processStickBgQueue(items, batchSize = 3, rerenderEachBatch = true) {
+// If `rerenderEachBatch` is true, swap individual img srcs as they complete
+// so carvings update in place without a full page re-render.
+function processStickBgQueue(items, batchSize = 4, rerenderEachBatch = true) {
   let i = 0;
   return new Promise(resolveAll => {
     function next() {
@@ -1984,24 +1982,25 @@ function processStickBgQueue(items, batchSize = 3, rerenderEachBatch = true) {
       const batch = items.slice(i, i + batchSize);
       i += batchSize;
       Promise.all(batch.map(s =>
-        removeBg(s.image_url).then(d => stickBgMap.set(s.image_url, d))
+        removeBg(s.image_url).then(d => {
+          stickBgMap.set(s.image_url, d);
+          // Swap the img src in-place if this image is currently visible
+          if (rerenderEachBatch) {
+            const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
+            const start = stickCurrentPage * itemsPerPage;
+            const pageItems = allStickData.slice(start, start + itemsPerPage);
+            if (pageItems.includes(s)) {
+              // Find the photo div for this item and update its img src directly
+              const photoDiv = document.querySelector(`.shaft-photo[data-id="${s.id}"]`);
+              if (photoDiv) {
+                const imgEl = photoDiv.querySelector('img');
+                if (imgEl) imgEl.src = d;
+              }
+            }
+          }
+        })
       )).then(() => {
-        if (rerenderEachBatch) {
-          const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-          const start = stickCurrentPage * itemsPerPage;
-          const pageItems = allStickData.slice(start, start + itemsPerPage);
-          const needsRefresh = pageItems.some(p => batch.includes(p));
-          if (needsRefresh) renderStickPage();
-        } else {
-          // Even for background pages, refresh if user navigated there
-          const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-          const start = stickCurrentPage * itemsPerPage;
-          const pageItems = allStickData.slice(start, start + itemsPerPage);
-          const needsRefresh = pageItems.some(p => batch.includes(p));
-          if (needsRefresh) renderStickPage();
-        }
-        // Yield to the browser before continuing
-        requestIdleCallback ? requestIdleCallback(next, {timeout:1000}) : setTimeout(next, 50);
+        requestIdleCallback ? requestIdleCallback(next, {timeout:1500}) : setTimeout(next, 80);
       });
     }
     next();
