@@ -977,6 +977,7 @@ select.fi option{background:var(--navy2)}
   width:100%;height:100%;
   object-fit:contain;
   display:block;
+  mix-blend-mode:multiply;
   filter:none;
 }
 .shaft-photo-above{position:relative}
@@ -1870,7 +1871,6 @@ async function loadStick() {
   if (!container) return;
   container.innerHTML = '';
 
-  // Show loading toast
   const toast = document.getElementById('stick-loading-toast');
   const subText = document.getElementById('slt-sub-text');
   if (toast) toast.classList.add('show');
@@ -1888,28 +1888,22 @@ async function loadStick() {
     stickBgMap = new Map();
     stickCurrentPage = 0;
 
-    // Pull any session-cached processed images so repeat visits are instant
+    // Restore any session-cached canvas-processed images (prior visit this session)
     loadBgCacheFromSession();
 
-    // Render immediately with raw images (or cached processed ones) — no waiting
+    // Render IMMEDIATELY — mix-blend-mode:multiply on the img handles white
+    // background blending against the wood shaft for free, no canvas wait needed
     if (toast) toast.classList.remove('show');
     const loadNote = document.getElementById('stick-load-note');
-    if (loadNote) loadNote.classList.remove('hidden');
+    if (loadNote) loadNote.classList.add('hidden');
     renderStickPage();
 
-    // Process the first page's images in small concurrency-limited batches,
-    // re-rendering as each batch completes so carvings "pop in" smoothly
+    // Canvas-process in background for better edge cleanup — fully non-blocking
     const itemsPerPage = STICKS_PER_PAGE * STICKS_PER_ROW;
-    const firstPageItems = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
-
-    if (firstPageItems.length) {
-      await processStickBgQueue(firstPageItems, 3, true);
-    }
-    if (loadNote) loadNote.classList.add('hidden');
-
-    // Process remaining pages' images in the background, low priority
-    const rest = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
-    if (rest.length) processStickBgQueue(rest, 3, false);
+    const firstPage = allStickData.slice(0, itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    const rest      = allStickData.slice(itemsPerPage).filter(s => !stickBgMap.has(s.image_url));
+    if (firstPage.length) processStickBgQueue(firstPage, 4, true);
+    if (rest.length)      processStickBgQueue(rest, 3, false);
 
   } catch(e) {
     if (toast) toast.classList.remove('show');
@@ -2015,7 +2009,7 @@ function removeBg(src) {
     img.crossOrigin = 'anonymous';
     const process = () => {
       try {
-        const S = 240;
+        const S = 160;
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = S;
         const ctx = canvas.getContext('2d');
