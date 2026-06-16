@@ -2016,15 +2016,9 @@ function removeBg(src) {
     const process = () => {
       try {
         const S = 240;
-        let canvas, ctx;
-        if (typeof OffscreenCanvas !== 'undefined') {
-          canvas = new OffscreenCanvas(S, S);
-          ctx = canvas.getContext('2d');
-        } else {
-          canvas = document.createElement('canvas');
-          canvas.width = canvas.height = S;
-          ctx = canvas.getContext('2d');
-        }
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = S;
+        const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, S, S);
         const id = ctx.getImageData(0, 0, S, S);
         const d = id.data;
@@ -2038,19 +2032,9 @@ function removeBg(src) {
           if (dist<T) d[i+3]=(Math.pow(dist/T,1.8)*d[i+3]+0.5)|0;
         }
         ctx.putImageData(id,0,0);
-        if (canvas instanceof OffscreenCanvas) {
-          canvas.convertToBlob({type:'image/png'}).then(blob => {
-            // Convert blob to a data URL so it's cacheable in sessionStorage
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => resolve(src);
-            reader.readAsDataURL(blob);
-          }).catch(()=>resolve(src));
-        } else {
-          resolve(canvas.toDataURL('image/png'));
-        }
+        resolve(canvas.toDataURL('image/png'));
       } catch(e) {
-        resolve(src); // CORS blocked — fall back to original, CSS blend still applies
+        resolve(src);
       }
     };
     img.onload = process;
