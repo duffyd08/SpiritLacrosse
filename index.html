@@ -1777,7 +1777,15 @@ function nav(page, skipHistory) {
   const bn = document.getElementById('bn-'+page);
   if (pg) pg.classList.add('active');
   if (bn) bn.classList.add('active');
-  if (!skipHistory) history.pushState({page},'','?page='+page);
+  if (!skipHistory) {
+  try {
+    if (window.location.href !== 'about:srcdoc') {
+      history.pushState({ page }, '', '?page=' + encodeURIComponent(page));
+    }
+  } catch (e) {
+    console.warn('History unavailable');
+  }
+}
   window.scrollTo(0,0);
   if (page==='gallery') loadGallery();
   if (page==='stick')   {
