@@ -105,15 +105,130 @@ header{position:fixed;top:0;left:0;right:0;height:var(--header);z-index:200;back
 
 /* HOME BODY LAYOUT */
 .home-body{
-  display:flex;
-  flex-direction:column;
+  display:grid;
+  grid-template-columns:1fr;
   gap:1.25rem;
   padding:1.25rem 1.25rem 2rem;
-  max-width:960px;
+  max-width:1080px;
   margin:0 auto;
 }
-.home-col-left{display:flex;flex-direction:column;gap:1rem}
+@media(min-width:720px){
+  .home-body{grid-template-columns:1fr 300px}
+}
+.home-col-left{display:flex;flex-direction:column;gap:1.25rem}
 .home-col-right{display:flex;flex-direction:column;gap:1rem}
+
+/* FEATURED CARVINGS PANEL */
+.fc-panel{
+  background:rgba(7,17,31,.82);
+  border:1px solid var(--gold-border);
+  border-radius:var(--rl);
+  overflow:hidden;
+  position:sticky;
+  top:1rem;
+}
+.fc-header{
+  padding:1rem 1rem .75rem;
+  border-bottom:1px solid rgba(232,184,75,.12);
+  display:flex;align-items:center;gap:.6rem;
+}
+.fc-header-icon{font-size:1.1rem}
+.fc-header-title{
+  font-family:'DM Mono',monospace;
+  font-size:10px;letter-spacing:2px;text-transform:uppercase;
+  color:var(--gold);font-weight:600;
+}
+.fc-header-sub{font-size:10px;color:var(--muted);margin-top:1px}
+.fc-note{
+  padding:.75rem 1rem;
+  font-size:12.5px;line-height:1.55;
+  color:rgba(255,255,255,.72);
+  border-bottom:1px solid rgba(232,184,75,.08);
+  font-style:italic;
+}
+.fc-note-label{font-style:normal;font-weight:600;color:var(--gold);font-size:10px;letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:.35rem}
+.fc-cards{display:flex;flex-direction:column;gap:0}
+.fc-card{
+  display:flex;align-items:center;gap:.75rem;
+  padding:.85rem 1rem;
+  border-bottom:1px solid rgba(255,255,255,.05);
+  cursor:pointer;transition:background .15s;
+}
+.fc-card:last-child{border-bottom:none}
+.fc-card:hover{background:rgba(232,184,75,.06)}
+.fc-img-wrap{
+  width:52px;height:52px;flex-shrink:0;
+  border-radius:8px;overflow:hidden;
+  border:1px solid rgba(232,184,75,.18);
+  background:rgba(255,255,255,.04);
+  display:flex;align-items:center;justify-content:center;
+}
+.fc-img{width:100%;height:100%;object-fit:cover}
+.fc-img-ph{font-size:1.4rem}
+.fc-info{flex:1;min-width:0}
+.fc-name{
+  font-size:12.5px;font-weight:600;color:var(--white);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.fc-meta{font-size:10.5px;color:var(--muted);margin-top:2px}
+.fc-desc{font-size:11px;color:rgba(255,255,255,.55);margin-top:3px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.fc-empty{padding:1.5rem 1rem;text-align:center;color:var(--muted);font-size:12px}
+.fc-view-link{font-size:10px;color:var(--gold);font-family:'DM Mono',monospace;letter-spacing:.5px;flex-shrink:0}
+
+/* FEATURED ADMIN */
+.fa-wrap{padding:1rem}
+.fa-section-title{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:.75rem}
+.fa-note-ta{
+  width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(232,184,75,.2);
+  border-radius:8px;padding:.65rem .85rem;color:var(--white);font-size:13px;
+  resize:vertical;min-height:80px;font-family:inherit;line-height:1.5;
+  box-sizing:border-box;
+}
+.fa-note-ta:focus{outline:none;border-color:var(--gold)}
+.fa-select-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem}
+.fa-slot{
+  border:1px dashed rgba(232,184,75,.25);border-radius:10px;
+  padding:.65rem;min-height:90px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.35rem;text-align:center;
+  background:rgba(255,255,255,.02);position:relative;
+}
+.fa-slot.filled{border-style:solid;border-color:rgba(232,184,75,.4);background:rgba(232,184,75,.05)}
+.fa-slot-label{font-size:10px;font-family:'DM Mono',monospace;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+.fa-slot-img{width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid rgba(232,184,75,.2)}
+.fa-slot-name{font-size:11px;color:var(--white);font-weight:600;line-height:1.3}
+.fa-slot-clear{
+  position:absolute;top:4px;right:6px;cursor:pointer;
+  font-size:14px;color:var(--muted);line-height:1;background:none;border:none;padding:0;
+}
+.fa-slot-clear:hover{color:var(--white)}
+.fa-slot-empty{font-size:1.5rem;opacity:.4}
+.fa-search-wrap{margin-top:.85rem}
+.fa-search{
+  width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;padding:.55rem .85rem;color:var(--white);font-size:13px;
+  box-sizing:border-box;
+}
+.fa-search:focus{outline:none;border-color:var(--gold)}
+.fa-results{margin-top:.5rem;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.fa-result-item{
+  display:flex;align-items:center;gap:.6rem;padding:.5rem .65rem;
+  border-radius:8px;cursor:pointer;transition:background .12s;
+}
+.fa-result-item:hover{background:rgba(232,184,75,.08)}
+.fa-result-thumb{width:34px;height:34px;border-radius:5px;object-fit:cover;border:1px solid rgba(232,184,75,.15);flex-shrink:0}
+.fa-result-ph{width:34px;height:34px;border-radius:5px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+.fa-result-name{font-size:12px;color:var(--white);font-weight:500}
+.fa-result-meta{font-size:10.5px;color:var(--muted)}
+.fa-save-btn{
+  width:100%;margin-top:1rem;padding:.65rem;
+  background:linear-gradient(135deg,var(--gold),#c9922a);
+  color:#000;border:none;border-radius:8px;
+  font-family:'DM Mono',monospace;font-size:12px;letter-spacing:1px;
+  font-weight:700;cursor:pointer;text-transform:uppercase;transition:opacity .15s;
+}
+.fa-save-btn:hover{opacity:.88}
+.fa-status{text-align:center;font-size:11.5px;margin-top:.6rem;min-height:18px;color:var(--gold)}
 
 /* MISSION SECTION — full width, text blocks stacked */
 .mission-section{
@@ -1145,6 +1260,9 @@ select.fi option{background:var(--navy2)}
 
     <div class="home-body">
 
+      <!-- LEFT COLUMN -->
+      <div class="home-col-left">
+
       <!-- MISSION: full-width stacked paragraphs -->
       <div class="mission-section">
         <p class="mission-p">As depicted in <em>The Spirit in the Stick</em> by Neil Duffy, Native Americans were known to carve symbols — each carrying deep personal significance to the player — into their lacrosse sticks. Each of the stewards of the stick in the story — including some of the Game's all-time greats — carve a symbol with special meaning into the stick as they pass it along.</p>
@@ -1213,9 +1331,28 @@ select.fi option{background:var(--navy2)}
         </div>
         <div class="section-label">Recent Submissions</div>
         <div id="home-recent-grid"></div>
-      </div>
+      </div><!-- end home-recent -->
 
-    </div>
+      </div><!-- end home-col-left -->
+
+      <!-- RIGHT COLUMN: Featured Carvings -->
+      <div class="home-col-right">
+        <div class="fc-panel" id="fc-panel">
+          <div class="fc-header">
+            <span class="fc-header-icon">✍️</span>
+            <div>
+              <div class="fc-header-title">From the Author</div>
+              <div class="fc-header-sub">Neil Duffy's picks</div>
+            </div>
+          </div>
+          <div id="fc-note-area"></div>
+          <div class="fc-cards" id="fc-cards">
+            <div class="fc-empty">Loading…</div>
+          </div>
+        </div>
+      </div><!-- end home-col-right -->
+
+    </div><!-- end home-body -->
 
     <!-- Hidden admin link -->
     <div style="text-align:center;padding:2rem 0 1rem">
@@ -1473,6 +1610,7 @@ select.fi option{background:var(--navy2)}
         <button class="atab" onclick="loadAdmin('approved',this)">Approved</button>
         <button class="atab" onclick="loadAdmin('denied',this)">Denied</button>
         <button class="atab" onclick="loadAnalytics(this)">📊 Analytics</button>
+        <button class="atab" onclick="loadFeaturedAdmin(this)">⭐ Featured</button>
       </div>
       <div id="admin-out"><div class="loading"><div class="spin"></div></div></div>
     </div>
@@ -1549,6 +1687,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const viewId = p.get('view');
   nav(pg, true);
   loadHome();
+  loadFeaturedPanel();
   updatePendingCount();
   // Silently preload stick data + process first page in background
   // so the Stick page feels instant when the user navigates to it
@@ -2255,6 +2394,7 @@ async function loadLibrary() {
       const dname = buildDisplayName(s);
       const stateFull = STATE_MAP[(s.state||'').toUpperCase()] || s.state || '';
       const meta  = [s.age ? 'Age '+s.age : '', stateFull, s.affiliation || ''].filter(Boolean).join(' · ');
+      const dateStr = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
       return `<div class="r-card">
         <div class="r-card-inner">
           <div class="r-img-col">
@@ -3865,6 +4005,230 @@ create policy "allow anon read"
       setTimeout(()=>this.textContent='Copy SQL',2000)
     ">Copy SQL</button>
   </div>`;
+}
+
+// ── FEATURED CARVINGS ──────────────────────────────────
+
+// State for admin panel
+let faAllApproved = [];
+let faSlot1 = null, faSlot2 = null;
+
+async function loadFeaturedPanel() {
+  const notesEl = document.getElementById('fc-note-area');
+  const cardsEl = document.getElementById('fc-cards');
+  if (!cardsEl) return;
+  try {
+    // Load config
+    const { data: cfg } = await sb.from('featured_config').select('*').eq('id', 1).maybeSingle();
+    // Render note
+    if (cfg && cfg.note && cfg.note.trim()) {
+      notesEl.innerHTML = `<div class="fc-note"><span class="fc-note-label">Author's Note</span>${esc(cfg.note)}</div>`;
+    } else {
+      notesEl.innerHTML = '';
+    }
+    // Load the two carvings
+    const ids = [cfg && cfg.slot1_id, cfg && cfg.slot2_id].filter(Boolean);
+    if (!ids.length) {
+      cardsEl.innerHTML = '<div class="fc-empty">No featured carvings yet.</div>';
+      return;
+    }
+    const { data: carvings } = await sb.from('illustrations').select('*').in('id', ids).eq('status','approved');
+    if (!carvings || !carvings.length) {
+      cardsEl.innerHTML = '<div class="fc-empty">No featured carvings yet.</div>';
+      return;
+    }
+    // Preserve slot order
+    const ordered = ids.map(id => carvings.find(c => c.id === id)).filter(Boolean);
+    cardsEl.innerHTML = ordered.map(s => {
+      const dname = buildDisplayName(s);
+      const stateFull = STATE_MAP[(s.state||'').toUpperCase()] || s.state || '';
+      const meta = [s.age ? 'Age '+s.age : '', stateFull, s.affiliation||''].filter(Boolean).join(' · ');
+      const img = s.image_url
+        ? `<img class="fc-img" src="${esc(s.image_url)}" loading="lazy" alt="${esc(dname)}">`
+        : `<div class="fc-img-ph">🎨</div>`;
+      return `<div class="fc-card" onclick="openById('${s.id}')">
+        <div class="fc-img-wrap">${img}</div>
+        <div class="fc-info">
+          <div class="fc-name">${esc(dname)}</div>
+          ${meta ? `<div class="fc-meta">${esc(meta)}</div>` : ''}
+          ${s.description ? `<div class="fc-desc">${esc(s.description)}</div>` : ''}
+        </div>
+        <span class="fc-view-link">→</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    if (cardsEl) cardsEl.innerHTML = '<div class="fc-empty">Could not load featured carvings.</div>';
+  }
+}
+
+async function loadFeaturedAdmin(btnEl) {
+  // Update tab active state
+  document.querySelectorAll('.atab').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+
+  const el = document.getElementById('admin-out');
+  el.innerHTML = '<div class="loading"><div class="spin"></div></div>';
+
+  try {
+    // Load current config
+    const { data: cfg } = await sb.from('featured_config').select('*').eq('id', 1).maybeSingle();
+    faSlot1 = null; faSlot2 = null;
+
+    // Load all approved for search
+    const { data: approved } = await sb.from('illustrations').select('id,image_url,first_name,last_name,display_name,age,state,affiliation,description,created_at').eq('status','approved').order('created_at',{ascending:false});
+    faAllApproved = approved || [];
+    approved && approved.forEach(s => cache[s.id] = s);
+
+    // Pre-populate slots from saved config
+    if (cfg && cfg.slot1_id) faSlot1 = faAllApproved.find(s => s.id === cfg.slot1_id) || null;
+    if (cfg && cfg.slot2_id) faSlot2 = faAllApproved.find(s => s.id === cfg.slot2_id) || null;
+
+    renderFeaturedAdmin(cfg);
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-t">Error: ${e.message}</div></div>`;
+  }
+}
+
+function renderFeaturedAdmin(cfg) {
+  const el = document.getElementById('admin-out');
+  const savedNote = (cfg && cfg.note) || '';
+
+  function slotHTML(slot, num) {
+    if (!slot) return `
+      <div class="fa-slot" id="fa-slot-${num}">
+        <div class="fa-slot-empty">🎨</div>
+        <div class="fa-slot-label">Carving ${num}</div>
+      </div>`;
+    const dname = buildDisplayName(slot);
+    const img = slot.image_url
+      ? `<img class="fa-slot-img" src="${esc(slot.image_url)}" alt="${esc(dname)}">`
+      : `<div style="font-size:1.4rem">🎨</div>`;
+    return `
+      <div class="fa-slot filled" id="fa-slot-${num}">
+        <button class="fa-slot-clear" onclick="faClear(${num})" title="Remove">✕</button>
+        ${img}
+        <div class="fa-slot-name">${esc(dname)}</div>
+        <div class="fa-slot-label">Carving ${num}</div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:1.5rem">⭐ Featured Carvings</div>
+    <div class="fa-wrap">
+      <div class="fa-section-title">Author's Note (shown on home page)</div>
+      <textarea class="fa-note-ta" id="fa-note-input" placeholder="Share a message about this project, the featured carvings, or anything you'd like visitors to read…">${esc(savedNote)}</textarea>
+
+      <div class="fa-section-title" style="margin-top:1.25rem">Selected Carvings</div>
+      <div class="fa-select-grid">
+        ${slotHTML(faSlot1, 1)}
+        ${slotHTML(faSlot2, 2)}
+      </div>
+
+      <div class="fa-search-wrap">
+        <input class="fa-search" type="search" placeholder="Search carvings by name, state, affiliation…" oninput="faSearch(this.value)" id="fa-search-input">
+        <div class="fa-results" id="fa-results"></div>
+      </div>
+
+      <button class="fa-save-btn" onclick="faSave()">Save & Publish</button>
+      <div class="fa-status" id="fa-status"></div>
+    </div>`;
+
+  // Show initial results
+  faRenderResults(faAllApproved.slice(0, 30));
+}
+
+function faRenderResults(items) {
+  const el = document.getElementById('fa-results');
+  if (!el) return;
+  if (!items.length) { el.innerHTML = '<div style="padding:.5rem;color:var(--muted);font-size:12px">No results</div>'; return; }
+  el.innerHTML = items.map(s => {
+    const dname = buildDisplayName(s);
+    const stateFull = STATE_MAP[(s.state||'').toUpperCase()] || s.state || '';
+    const meta = [s.age ? 'Age '+s.age : '', stateFull, s.affiliation||''].filter(Boolean).join(' · ');
+    const thumb = s.image_url
+      ? `<img class="fa-result-thumb" src="${esc(s.image_url)}" alt="${esc(dname)}">`
+      : `<div class="fa-result-ph">🎨</div>`;
+    return `<div class="fa-result-item" onclick="faSelect('${s.id}')">
+      ${thumb}
+      <div>
+        <div class="fa-result-name">${esc(dname)}</div>
+        ${meta ? `<div class="fa-result-meta">${esc(meta)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function faSearch(q) {
+  const term = q.trim().toLowerCase();
+  if (!term) { faRenderResults(faAllApproved.slice(0, 30)); return; }
+  const filtered = faAllApproved.filter(s => {
+    const dname = buildDisplayName(s).toLowerCase();
+    const state = (s.state||'').toLowerCase();
+    const aff   = (s.affiliation||'').toLowerCase();
+    return dname.includes(term) || state.includes(term) || aff.includes(term);
+  });
+  faRenderResults(filtered.slice(0, 30));
+}
+
+function faSelect(id) {
+  const s = faAllApproved.find(x => x.id === id);
+  if (!s) return;
+  // Fill slot1 first, then slot2; if both full, shift
+  if (!faSlot1) { faSlot1 = s; }
+  else if (!faSlot2) { faSlot2 = s; }
+  else { faSlot1 = faSlot2; faSlot2 = s; }
+  // Re-render just the slots
+  const grid = document.querySelector('.fa-select-grid');
+  if (grid) {
+    function slotHTML(slot, num) {
+      if (!slot) return `<div class="fa-slot" id="fa-slot-${num}"><div class="fa-slot-empty">🎨</div><div class="fa-slot-label">Carving ${num}</div></div>`;
+      const dname = buildDisplayName(slot);
+      const img = slot.image_url ? `<img class="fa-slot-img" src="${esc(slot.image_url)}" alt="${esc(dname)}">` : `<div style="font-size:1.4rem">🎨</div>`;
+      return `<div class="fa-slot filled" id="fa-slot-${num}"><button class="fa-slot-clear" onclick="faClear(${num})" title="Remove">✕</button>${img}<div class="fa-slot-name">${esc(dname)}</div><div class="fa-slot-label">Carving ${num}</div></div>`;
+    }
+    grid.innerHTML = slotHTML(faSlot1, 1) + slotHTML(faSlot2, 2);
+  }
+}
+
+function faClear(num) {
+  if (num === 1) faSlot1 = null;
+  else faSlot2 = null;
+  faSelect.__dummyRerender = true;
+  // Re-render slots
+  const grid = document.querySelector('.fa-select-grid');
+  if (grid) {
+    function slotHTML(slot, n) {
+      if (!slot) return `<div class="fa-slot" id="fa-slot-${n}"><div class="fa-slot-empty">🎨</div><div class="fa-slot-label">Carving ${n}</div></div>`;
+      const dname = buildDisplayName(slot);
+      const img = slot.image_url ? `<img class="fa-slot-img" src="${esc(slot.image_url)}" alt="${esc(dname)}">` : `<div style="font-size:1.4rem">🎨</div>`;
+      return `<div class="fa-slot filled" id="fa-slot-${n}"><button class="fa-slot-clear" onclick="faClear(${n})" title="Remove">✕</button>${img}<div class="fa-slot-name">${esc(dname)}</div><div class="fa-slot-label">Carving ${n}</div></div>`;
+    }
+    grid.innerHTML = slotHTML(faSlot1, 1) + slotHTML(faSlot2, 2);
+  }
+}
+
+async function faSave() {
+  const noteEl = document.getElementById('fa-note-input');
+  const statusEl = document.getElementById('fa-status');
+  const note = noteEl ? noteEl.value.trim() : '';
+  if (statusEl) statusEl.textContent = 'Saving…';
+  try {
+    const { error } = await sb.from('featured_config').upsert({
+      id: 1,
+      note: note,
+      slot1_id: faSlot1 ? faSlot1.id : null,
+      slot2_id: faSlot2 ? faSlot2.id : null,
+    }, { onConflict: 'id' });
+    if (error) throw error;
+    if (statusEl) {
+      statusEl.textContent = '✓ Published!';
+      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    }
+    // Refresh the home panel live
+    loadFeaturedPanel();
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+  }
 }
 
 // ── EMAIL NOTIFICATION ─────────────────────────────────
