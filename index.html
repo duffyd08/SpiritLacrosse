@@ -1772,31 +1772,62 @@ function downloadPDF() {
 }
 
 function nav(page, skipHistory) {
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
-  const pg = document.getElementById('page-'+page);
-  const bn = document.getElementById('bn-'+page);
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.bn-item').forEach(b => b.classList.remove('active'));
+
+  const pg = document.getElementById('page-' + page);
+  const bn = document.getElementById('bn-' + page);
+
   if (pg) pg.classList.add('active');
   if (bn) bn.classList.add('active');
-  if (!skipHistory) history.pushState({page},'','?page='+page);
-  window.scrollTo(0,0);
-  if (page==='gallery') loadGallery();
-  if (page==='stick')   {
-    const loadNote = document.getElementById('stick-load-note');
-    if (loadNote) loadNote.classList.remove('hidden');
-    loadStick();
-    const s = document.getElementById('stick-search');
-    if(s) s.value='';
-  }
-  if (page==='library') loadLibrary();
-  if (page==='admin')   loadAdmin('pending', document.querySelectorAll('.atab')[0]);
-  if (!skipHistory) trackPageView(page);
 
-  // Show flat map only on stick page
+  if (!skipHistory) {
+    try {
+      if (window.location.href !== 'about:srcdoc') {
+        history.pushState(
+          { page },
+          '',
+          '?page=' + encodeURIComponent(page)
+        );
+      }
+    } catch (e) {
+      console.warn('History unavailable');
+    }
+  }
+
+  window.scrollTo(0, 0);
+
+  if (page === 'gallery') loadGallery();
+
+  if (page === 'stick') loadStick();
+
+  if (page === 'library') {
+    const lib = document.getElementById('page-library');
+    if (lib && !lib.dataset.loaded) {
+      loadLibrary();
+      lib.dataset.loaded = "1";
+    }
+  }
+
+  if (page === 'admin') {
+    const tab = document.querySelector('.atab');
+    loadAdmin('pending', tab || null);
+  }
+
   const mapBg = document.getElementById('stick-map-bg');
-  if (mapBg) mapBg.classList.toggle('hidden', page !== 'stick');
+  if (mapBg) {
+    mapBg.classList.toggle('hidden', page !== 'stick');
+  }
+
+  if (!skipHistory) trackPageView(page);
 }
-window.addEventListener('popstate', e => { if (e.state && e.state.page) nav(e.state.page, true); });
+
+window.addEventListener('popstate', e => {
+  if (e.state && e.state.page) nav(e.state.page, true);
+});
+
+const params = new URLSearchParams(location.search);
+nav(params.get('page') || 'home', true);
 
 // ── HOME ───────────────────────────────────────────────
 function countUp(el, target, duration=1200) {
