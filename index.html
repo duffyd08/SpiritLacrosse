@@ -13,8 +13,8 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://duffylacrosse.com">
 <meta name="twitter:card" content="summary_large_image">
-<meta property="og:image" content="https://duffylacrosse.com/cover.jpg">
-<meta name="twitter:image" content="https://duffylacrosse.com/cover.jpg">
+<meta property="og:image" content="https://duffylacrosse.com/share.png">
+<meta name="twitter:image" content="https://duffylacrosse.com/share.png">
 <meta name="twitter:title" content="SpiritLacrosse">
 <meta name="twitter:description" content="A community illustration gallery inspired by The Spirit in the Stick by Neil Duffy.">
 <meta name="robots" content="index, follow">
@@ -138,7 +138,7 @@ header{position:fixed;top:0;left:0;right:0;height:var(--header);z-index:200;back
   font-size:10px;letter-spacing:2px;text-transform:uppercase;
   color:var(--gold);font-weight:600;
 }
-.fc-header-sub{font-size:13px;color:var(--muted);margin-top:1px}
+.fc-header-sub{font-size:10px;color:var(--muted);margin-top:1px}
 .fc-note{
   padding:.75rem 1rem;
   font-size:12.5px;line-height:1.55;
@@ -4058,7 +4058,7 @@ create policy "allow anon read"
 
 // State for admin panel
 let faAllApproved = [];
-let faSlot1 = null, faSlot2 = null;
+let faSlot1 = null, faSlot2 = null, faSlot3 = null, faSlot4 = null;
 
 async function loadFeaturedPanel() {
   const notesEl = document.getElementById('fc-note-area-beside');
@@ -4073,8 +4073,8 @@ async function loadFeaturedPanel() {
     } else {
       notesEl.innerHTML = '';
     }
-    // Load the two carvings
-    const ids = [cfg && cfg.slot1_id, cfg && cfg.slot2_id].filter(Boolean);
+    // Load the four carvings
+    const ids = [cfg && cfg.slot1_id, cfg && cfg.slot2_id, cfg && cfg.slot3_id, cfg && cfg.slot4_id].filter(Boolean);
     if (!ids.length) {
       cardsEl.innerHTML = '<div class="fc-empty">No featured carvings yet.</div>';
       return;
@@ -4119,7 +4119,7 @@ async function loadFeaturedAdmin(btnEl) {
   try {
     // Load current config
     const { data: cfg } = await sb.from('featured_config').select('*').eq('id', 1).maybeSingle();
-    faSlot1 = null; faSlot2 = null;
+    faSlot1 = null; faSlot2 = null; faSlot3 = null; faSlot4 = null;
 
     // Load all approved for search
     const { data: approved } = await sb.from('illustrations').select('id,image_url,first_name,last_name,display_name,age,state,affiliation,description,created_at').eq('status','approved').order('created_at',{ascending:false});
@@ -4129,6 +4129,8 @@ async function loadFeaturedAdmin(btnEl) {
     // Pre-populate slots from saved config
     if (cfg && cfg.slot1_id) faSlot1 = faAllApproved.find(s => s.id === cfg.slot1_id) || null;
     if (cfg && cfg.slot2_id) faSlot2 = faAllApproved.find(s => s.id === cfg.slot2_id) || null;
+    if (cfg && cfg.slot3_id) faSlot3 = faAllApproved.find(s => s.id === cfg.slot3_id) || null;
+    if (cfg && cfg.slot4_id) faSlot4 = faAllApproved.find(s => s.id === cfg.slot4_id) || null;
 
     renderFeaturedAdmin(cfg);
   } catch(e) {
@@ -4169,6 +4171,8 @@ function renderFeaturedAdmin(cfg) {
       <div class="fa-select-grid">
         ${slotHTML(faSlot1, 1)}
         ${slotHTML(faSlot2, 2)}
+        ${slotHTML(faSlot3, 3)}
+        ${slotHTML(faSlot4, 4)}
       </div>
 
       <div class="fa-search-wrap">
@@ -4223,7 +4227,9 @@ function faSelect(id) {
   // Fill slot1 first, then slot2; if both full, shift
   if (!faSlot1) { faSlot1 = s; }
   else if (!faSlot2) { faSlot2 = s; }
-  else { faSlot1 = faSlot2; faSlot2 = s; }
+  else if (!faSlot3) { faSlot3 = s; }
+  else if (!faSlot4) { faSlot4 = s; }
+  else { faSlot1 = faSlot2; faSlot2 = faSlot3; faSlot3 = faSlot4; faSlot4 = s; }
   // Re-render just the slots
   const grid = document.querySelector('.fa-select-grid');
   if (grid) {
@@ -4233,13 +4239,15 @@ function faSelect(id) {
       const img = slot.image_url ? `<img class="fa-slot-img" src="${esc(slot.image_url)}" alt="${esc(dname)}">` : `<div style="font-size:1.4rem">🎨</div>`;
       return `<div class="fa-slot filled" id="fa-slot-${num}"><button class="fa-slot-clear" onclick="faClear(${num})" title="Remove">✕</button>${img}<div class="fa-slot-name">${esc(dname)}</div><div class="fa-slot-label">Carving ${num}</div></div>`;
     }
-    grid.innerHTML = slotHTML(faSlot1, 1) + slotHTML(faSlot2, 2);
+    grid.innerHTML = slotHTML(faSlot1, 1) + slotHTML(faSlot2, 2) + slotHTML(faSlot3, 3) + slotHTML(faSlot4, 4);
   }
 }
 
 function faClear(num) {
   if (num === 1) faSlot1 = null;
-  else faSlot2 = null;
+  else if (num === 2) faSlot2 = null;
+  else if (num === 3) faSlot3 = null;
+  else faSlot4 = null;
   faSelect.__dummyRerender = true;
   // Re-render slots
   const grid = document.querySelector('.fa-select-grid');
@@ -4250,7 +4258,7 @@ function faClear(num) {
       const img = slot.image_url ? `<img class="fa-slot-img" src="${esc(slot.image_url)}" alt="${esc(dname)}">` : `<div style="font-size:1.4rem">🎨</div>`;
       return `<div class="fa-slot filled" id="fa-slot-${n}"><button class="fa-slot-clear" onclick="faClear(${n})" title="Remove">✕</button>${img}<div class="fa-slot-name">${esc(dname)}</div><div class="fa-slot-label">Carving ${n}</div></div>`;
     }
-    grid.innerHTML = slotHTML(faSlot1, 1) + slotHTML(faSlot2, 2);
+    grid.innerHTML = slotHTML(faSlot1, 1) + slotHTML(faSlot2, 2) + slotHTML(faSlot3, 3) + slotHTML(faSlot4, 4);
   }
 }
 
@@ -4265,6 +4273,8 @@ async function faSave() {
       note: note,
       slot1_id: faSlot1 ? faSlot1.id : null,
       slot2_id: faSlot2 ? faSlot2.id : null,
+      slot3_id: faSlot3 ? faSlot3.id : null,
+      slot4_id: faSlot4 ? faSlot4.id : null,
     }, { onConflict: 'id' });
     if (error) throw error;
     if (statusEl) {
@@ -4521,7 +4531,7 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
     Artwork remains the property of its respective creators. Reproduction of any content without permission is prohibited.<br>
     <span style="color:rgba(180,200,220,.35);font-size:10px;">
       <strong style="color:rgba(232,184,75,.5);letter-spacing:.5px;">TERMS OF USE</strong> &nbsp;&middot;&nbsp;
-      By submitting content to this site, you grant SpiritLacrosse a non-exclusive, royalty-free license to display your work on this platform and associated accounts. You retain ownership of your submitted work.
+      By submitting content to this site, you grant SpiritLacrosse a non-exclusive, royalty-free license to display your work on this platform. You retain ownership of your submitted work.
     </span>
   </p>
 </footer>
