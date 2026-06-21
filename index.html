@@ -780,10 +780,12 @@ select.fi option{background:var(--navy2)}
   padding:1rem 1.25rem 1.5rem;
   border-top:1px solid var(--gold-border);
   background:rgba(13,30,53,.6);
+  max-height:45vh;
+  overflow-y:auto;
 }
 .viewer-name{font-family:'Anton',sans-serif;font-size:22px;letter-spacing:1.5px;color:var(--gold);margin-bottom:3px}
 .viewer-meta{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.5px;margin-bottom:.75rem}
-.viewer-desc{font-size:16px;color:var(--off);line-height:1.75;margin-bottom:1rem;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.viewer-desc{font-size:16px;color:var(--off);line-height:1.75;margin-bottom:1rem;white-space:pre-wrap}
 .viewer-share{display:flex;flex-direction:column;gap:10px}
 .viewer-share-note{font-family:'DM Mono',monospace;font-size:14px;color:var(--off);letter-spacing:.3px;line-height:1.7;padding-bottom:4px;font-style:italic}
 .viewer-share-url-row{display:flex;gap:8px;align-items:center}
@@ -961,7 +963,9 @@ select.fi option{background:var(--navy2)}
   background:rgba(13,30,53,.9);border-top:1px solid var(--gold-border);
   display:flex;flex-direction:column;gap:.625rem;
 }
-#acrop-zoom-row{display:flex;align-items:center;gap:.75rem}
+#acrop-zoom-row, .acrop-row{display:flex;align-items:center;gap:.75rem}
+.acrop-row span{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.5px;white-space:nowrap}
+.acrop-row input[type=range]{flex:1;accent-color:var(--gold);cursor:pointer}
 #acrop-zoom-row span{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.5px;white-space:nowrap}
 #acrop-zoom-slider{flex:1;accent-color:var(--gold);cursor:pointer}
 #acrop-zoom-val{font-family:'DM Mono',monospace;font-size:11px;color:var(--gold);letter-spacing:.5px;min-width:36px;text-align:right}
@@ -3267,16 +3271,25 @@ let acropBox = {x:0,y:0,w:0,h:0};   // in CSS px relative to stage
 // drag state
 let acropDrag = null; // {type:'pan'|handle, startX, startY, origOff, origBox}
 let acropPinchDist0 = 0, acropPinchZoom0 = 1;
+let acropBright = 100, acropContrast = 100;
 
 function openAdminCrop(id, url) {
   acropId = id;
   acropImgUrl = url;
+  acropBright = 100;
+  acropContrast = 100;
   const modal = document.getElementById('acrop-modal');
   const img   = document.getElementById('acrop-img');
   const wrap  = document.getElementById('acrop-stage-wrap');
   modal.classList.add('open');
   document.getElementById('acrop-apply').disabled = true;
   document.getElementById('acrop-apply').textContent = '✓ Save Crop';
+  // Reset adjustment sliders
+  const bs = document.getElementById('acrop-bright-slider');
+  const cs = document.getElementById('acrop-contrast-slider');
+  if (bs) { bs.value = 100; document.getElementById('acrop-bright-val').textContent = '100%'; }
+  if (cs) { cs.value = 100; document.getElementById('acrop-contrast-val').textContent = '100%'; }
+  img.style.filter = '';
   img.onload = () => {
     acropNatW = img.naturalWidth;
     acropNatH = img.naturalHeight;
@@ -3284,6 +3297,17 @@ function openAdminCrop(id, url) {
     document.getElementById('acrop-apply').disabled = false;
   };
   img.src = url;
+}
+
+function acropOnAdjust() {
+  const bs = document.getElementById('acrop-bright-slider');
+  const cs = document.getElementById('acrop-contrast-slider');
+  acropBright = parseInt(bs.value, 10);
+  acropContrast = parseInt(cs.value, 10);
+  document.getElementById('acrop-bright-val').textContent = acropBright + '%';
+  document.getElementById('acrop-contrast-val').textContent = acropContrast + '%';
+  const img = document.getElementById('acrop-img');
+  img.style.filter = `brightness(${acropBright}%) contrast(${acropContrast}%)`;
 }
 
 function acropInitStage() {
@@ -3453,7 +3477,9 @@ async function applyAdminCrop() {
     const src = new Image();
     src.crossOrigin = 'anonymous';
     await new Promise((res, rej) => { src.onload = res; src.onerror = rej; src.src = acropImgUrl; });
-    canvas.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+    const ctx = canvas.getContext('2d');
+    ctx.filter = `brightness(${acropBright}%) contrast(${acropContrast}%)`;
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
 
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.93));
 
@@ -4465,7 +4491,7 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 </div>
 <div id="acrop-modal">
   <div id="acrop-topbar">
-    <div id="acrop-title">✂ Crop Image</div>
+    <div id="acrop-title">✂ Crop & Adjust Image</div>
     <button id="acrop-close" onclick="closeAdminCrop()">✕</button>
   </div>
   <div id="acrop-stage-wrap">
@@ -4482,10 +4508,20 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
     </div>
   </div>
   <div id="acrop-bottombar">
-    <div id="acrop-zoom-row">
+    <div class="acrop-row">
       <span>🔍 Zoom</span>
       <input id="acrop-zoom-slider" type="range" min="0.25" max="4" step="0.01" value="1" oninput="acropOnZoom(this.value)">
       <span id="acrop-zoom-val">1.0×</span>
+    </div>
+    <div class="acrop-row">
+      <span>☀️ Brightness</span>
+      <input id="acrop-bright-slider" type="range" min="50" max="150" step="1" value="100" oninput="acropOnAdjust()">
+      <span id="acrop-bright-val">100%</span>
+    </div>
+    <div class="acrop-row">
+      <span>◐ Contrast</span>
+      <input id="acrop-contrast-slider" type="range" min="50" max="150" step="1" value="100" oninput="acropOnAdjust()">
+      <span id="acrop-contrast-val">100%</span>
     </div>
     <div id="acrop-hint">Drag image to pan · Drag corners/edges to resize crop · Pinch or scroll to zoom</div>
     <div id="acrop-actions">
