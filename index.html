@@ -3556,21 +3556,40 @@ async function applyAdminCrop() {
   btn.disabled = true; btn.textContent = 'Saving…';
 
   try {
-    // acropCrop is already in natural image pixels — clamp to image bounds
-    const sx = Math.max(0, Math.round(acropCrop.x));
-    const sy = Math.max(0, Math.round(acropCrop.y));
-    const sw = Math.min(acropNatW - sx, Math.max(1, Math.round(acropCrop.w)));
-    const sh = Math.min(acropNatH - sy, Math.max(1, Math.round(acropCrop.h)));
+    // acropCrop is in natural image pixels — allow extending beyond image bounds
+    const cx = Math.round(acropCrop.x);
+    const cy = Math.round(acropCrop.y);
+    const cw = Math.max(1, Math.round(acropCrop.w));
+    const ch = Math.max(1, Math.round(acropCrop.h));
 
-    // Draw cropped region onto canvas
     const canvas = document.createElement('canvas');
-    canvas.width = sw; canvas.height = sh;
+    canvas.width  = cw;
+    canvas.height = ch;
     const src = new Image();
     src.crossOrigin = 'anonymous';
     await new Promise((res, rej) => { src.onload = res; src.onerror = rej; src.src = acropImgUrl; });
     const ctx = canvas.getContext('2d');
+
+    // Fill background white (covers any area outside image bounds)
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Apply brightness/contrast filter
     ctx.filter = `brightness(${acropBright}%) contrast(${acropContrast}%)`;
-    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+
+    // Source rect clipped to image bounds
+    const sx = Math.max(0, cx);
+    const sy = Math.max(0, cy);
+    const sw = Math.min(acropNatW - sx, cx + cw - sx);
+    const sh = Math.min(acropNatH - sy, cy + ch - sy);
+
+    // Destination offset (if crop box started left/above image, offset into canvas)
+    const dx = sx - cx;
+    const dy = sy - cy;
+
+    if (sw > 0 && sh > 0) {
+      ctx.drawImage(src, sx, sy, sw, sh, dx, dy, sw, sh);
+    }
 
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.93));
 
