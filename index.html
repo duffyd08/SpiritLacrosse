@@ -3373,57 +3373,70 @@ function acropBindEvents() {
   const wrap = document.getElementById('acrop-stage-wrap');
   const box  = document.getElementById('acrop-box');
 
-  // Remove old listeners by cloning
-  const newWrap = wrap.cloneNode(true); // shallow — we re-attach below
-  // Instead just use a flag approach; re-bind safely
-  wrap._acropBound = true;
+  // Use a single pointer handler on wrap to avoid conflicts
+  wrap.onpointerdown = ev => {
+    // Determine what was hit
+    const handle = ev.target.dataset && ev.target.dataset.handle;
+    const hitBox = ev.target === box || (ev.target.closest && ev.target.closest('#acrop-box') === box);
 
-  // ── Pointer events on the box handles + box body ──
-  box.onpointerdown = ev => {
-    ev.stopPropagation();
-    const handle = ev.target.dataset.handle;
-    box.setPointerCapture(ev.pointerId);
-    acropDrag = {
-      type: handle || 'move',
-      startX: ev.clientX, startY: ev.clientY,
-      origBox: {...acropBox}
-    };
+    wrap.setPointerCapture(ev.pointerId);
+
+    if (handle) {
+      // Resizing a corner or edge
+      acropDrag = {
+        type: handle,
+        startX: ev.clientX, startY: ev.clientY,
+        origBox: {...acropBox}
+      };
+    } else if (hitBox) {
+      // Moving the box
+      acropDrag = {
+        type: 'move',
+        startX: ev.clientX, startY: ev.clientY,
+        origBox: {...acropBox}
+      };
+    } else {
+      // Panning the image
+      acropDrag = {
+        type: 'pan',
+        startX: ev.clientX, startY: ev.clientY,
+        origOff: {x: acropOffX, y: acropOffY}
+      };
+    }
+    ev.preventDefault();
   };
-  box.onpointermove = ev => {
+
+  wrap.onpointermove = ev => {
     if (!acropDrag) return;
     const dx = ev.clientX - acropDrag.startX;
     const dy = ev.clientY - acropDrag.startY;
-    const ob = acropDrag.origBox;
     const t = acropDrag.type;
-    if (t === 'move') {
-      acropBox.x = ob.x + dx; acropBox.y = ob.y + dy;
-    } else {
-      // resize by handle
-      let {x,y,w,h} = ob;
-      if (t==='tl'||t==='l'||t==='bl') { x=ob.x+dx; w=ob.w-dx; }
-      if (t==='tr'||t==='r'||t==='br') { w=ob.w+dx; }
-      if (t==='tl'||t==='t'||t==='tr') { y=ob.y+dy; h=ob.h-dy; }
-      if (t==='bl'||t==='b'||t==='br') { h=ob.h+dy; }
-      if (w>40) { acropBox.x=x; acropBox.w=w; }
-      if (h>40) { acropBox.y=y; acropBox.h=h; }
-    }
-    acropDrawBox();
-  };
-  box.onpointerup = box.onpointercancel = () => { acropDrag = null; };
 
-  // ── Pointer events on stage for panning ──
-  wrap.onpointerdown = ev => {
-    if (acropDrag) return;
-    wrap.setPointerCapture(ev.pointerId);
-    acropDrag = { type:'pan', startX:ev.clientX, startY:ev.clientY, origOff:{x:acropOffX,y:acropOffY} };
+    if (t === 'pan') {
+      acropOffX = acropDrag.origOff.x + dx;
+      acropOffY = acropDrag.origOff.y + dy;
+      acropApplyImgTransform();
+    } else if (t === 'move') {
+      acropBox.x = acropDrag.origBox.x + dx;
+      acropBox.y = acropDrag.origBox.y + dy;
+      acropDrawBox();
+    } else {
+      // Resize
+      let {x, y, w, h} = acropDrag.origBox;
+      if (t==='tl'||t==='l'||t==='bl') { const nx=x+dx, nw=w-dx; if(nw>40){acropBox.x=nx; acropBox.w=nw;} }
+      if (t==='tr'||t==='r'||t==='br') { const nw=w+dx; if(nw>40) acropBox.w=nw; }
+      if (t==='tl'||t==='t'||t==='tr') { const ny=y+dy, nh=h-dy; if(nh>40){acropBox.y=ny; acropBox.h=nh;} }
+      if (t==='bl'||t==='b'||t==='br') { const nh=h+dy; if(nh>40) acropBox.h=nh; }
+      acropDrawBox();
+    }
   };
-  wrap.onpointermove = ev => {
-    if (!acropDrag || acropDrag.type !== 'pan') return;
-    acropOffX = acropDrag.origOff.x + (ev.clientX - acropDrag.startX);
-    acropOffY = acropDrag.origOff.y + (ev.clientY - acropDrag.startY);
-    acropApplyImgTransform();
-  };
+
   wrap.onpointerup = wrap.onpointercancel = () => { acropDrag = null; };
+
+  // Clear old box-level handlers to avoid double-firing
+  box.onpointerdown = null;
+  box.onpointermove = null;
+  box.onpointerup   = null;
 
   // ── Pinch zoom ──
   wrap.ontouchstart = ev => {
@@ -3504,11 +3517,12 @@ async function applyAdminCrop() {
 
   try {
     // Compute crop rect in natural image pixels
+    // acropBox is in stage-local CSS px; acropOffX/Y is image top-left in stage-local px
     const effectiveScale = acropBaseScale * acropZoom;
     const sx = Math.max(0, Math.round((acropBox.x - acropOffX) / effectiveScale));
     const sy = Math.max(0, Math.round((acropBox.y - acropOffY) / effectiveScale));
-    const sw = Math.min(acropNatW - sx, Math.round(Math.max(40, acropBox.w) / effectiveScale));
-    const sh = Math.min(acropNatH - sy, Math.round(Math.max(40, acropBox.h) / effectiveScale));
+    const sw = Math.min(acropNatW - sx, Math.max(1, Math.round(acropBox.w / effectiveScale)));
+    const sh = Math.min(acropNatH - sy, Math.max(1, Math.round(acropBox.h / effectiveScale)));
 
     // Draw cropped region onto canvas
     const canvas = document.createElement('canvas');
