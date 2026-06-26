@@ -3269,193 +3269,233 @@ function onReorderPointerDown(ev) {
 // ── ADMIN IMAGE CROP ───────────────────────────────────
 let acropId = null, acropImgUrl = null;
 let acropNatW = 0, acropNatH = 0;
-let acropBaseScale = 1; // scale so image fits the stage at zoom=1
-let acropZoom = 1;
-let acropOffX = 0, acropOffY = 0;   // pan offset in CSS px
-let acropBox = {x:0,y:0,w:0,h:0};   // in CSS px relative to stage
+let acropZoom = 1;          // display zoom (1 = fit-to-stage)
+let acropPanX = 0, acropPanY = 0;  // pan in image-space pixels (offset from center)
+// Crop box in image-space pixels
+let acropCrop = {x:0, y:0, w:0, h:0};
+let acropBright = 100, acropContrast = 100;
 
 // drag state
-let acropDrag = null; // {type:'pan'|handle, startX, startY, origOff, origBox}
+let acropDrag = null;
 let acropPinchDist0 = 0, acropPinchZoom0 = 1;
-let acropBright = 100, acropContrast = 100;
+
+// ── helpers ──
+function acropGetFitScale() {
+  const wrap = document.getElementById('acrop-stage-wrap');
+  return Math.min(wrap.clientWidth / acropNatW, wrap.clientHeight / acropNatH);
+}
+
+// Convert image-space px → stage CSS px
+function acropImgToStage(ix, iy) {
+  const wrap = document.getElementById('acrop-stage-wrap');
+  const fitScale = acropGetFitScale();
+  const displayScale = fitScale * acropZoom;
+  const cx = wrap.clientWidth  / 2;
+  const cy = wrap.clientHeight / 2;
+  return {
+    x: cx + (ix - acropNatW/2 + acropPanX) * displayScale,
+    y: cy + (iy - acropNatH/2 + acropPanY) * displayScale
+  };
+}
+
+// Convert stage CSS px → image-space px
+function acropStageToImg(sx, sy) {
+  const wrap = document.getElementById('acrop-stage-wrap');
+  const fitScale = acropGetFitScale();
+  const displayScale = fitScale * acropZoom;
+  const cx = wrap.clientWidth  / 2;
+  const cy = wrap.clientHeight / 2;
+  return {
+    x: (sx - cx) / displayScale + acropNatW/2 - acropPanX,
+    y: (sy - cy) / displayScale + acropNatH/2 - acropPanY
+  };
+}
+
+function acropRedraw() {
+  const wrap = document.getElementById('acrop-stage-wrap');
+  const img  = document.getElementById('acrop-img');
+  const box  = document.getElementById('acrop-box');
+  const fitScale = acropGetFitScale();
+  const displayScale = fitScale * acropZoom;
+
+  // Position + size the image
+  const iw = acropNatW * displayScale;
+  const ih = acropNatH * displayScale;
+  const tl = acropImgToStage(0, 0);
+  img.style.width  = iw + 'px';
+  img.style.height = ih + 'px';
+  img.style.left   = tl.x + 'px';
+  img.style.top    = tl.y + 'px';
+
+  // Position + size the crop box
+  const bTL = acropImgToStage(acropCrop.x, acropCrop.y);
+  const bBR = acropImgToStage(acropCrop.x + acropCrop.w, acropCrop.y + acropCrop.h);
+  box.style.left   = bTL.x + 'px';
+  box.style.top    = bTL.y + 'px';
+  box.style.width  = Math.max(10, bBR.x - bTL.x) + 'px';
+  box.style.height = Math.max(10, bBR.y - bTL.y) + 'px';
+}
 
 function openAdminCrop(id, url) {
   acropId = id;
   acropImgUrl = url;
   acropBright = 100;
   acropContrast = 100;
+  acropZoom = 1;
+  acropPanX = 0;
+  acropPanY = 0;
+
   const modal = document.getElementById('acrop-modal');
   const img   = document.getElementById('acrop-img');
-  const wrap  = document.getElementById('acrop-stage-wrap');
   modal.classList.add('open');
   document.getElementById('acrop-apply').disabled = true;
   document.getElementById('acrop-apply').textContent = '✓ Save Crop';
-  // Reset adjustment sliders
-  const bs = document.getElementById('acrop-bright-slider');
-  const cs = document.getElementById('acrop-contrast-slider');
-  if (bs) { bs.value = 100; document.getElementById('acrop-bright-val').textContent = '100%'; }
-  if (cs) { cs.value = 100; document.getElementById('acrop-contrast-val').textContent = '100%'; }
+
+  // Reset sliders
+  ['acrop-zoom-slider','acrop-bright-slider','acrop-contrast-slider'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = 100;
+  });
+  document.getElementById('acrop-zoom-val').textContent = '1.0×';
+  document.getElementById('acrop-bright-val').textContent = '100%';
+  document.getElementById('acrop-contrast-val').textContent = '100%';
   img.style.filter = '';
+
   img.onload = () => {
     acropNatW = img.naturalWidth;
     acropNatH = img.naturalHeight;
-    acropInitStage();
+    // Default crop = full image with 5% padding
+    const pad = 0.05;
+    acropCrop = {
+      x: acropNatW * pad,
+      y: acropNatH * pad,
+      w: acropNatW * (1 - 2*pad),
+      h: acropNatH * (1 - 2*pad)
+    };
+    acropRedraw();
+    acropBindEvents();
     document.getElementById('acrop-apply').disabled = false;
   };
   img.src = url;
 }
 
 function acropOnAdjust() {
-  const bs = document.getElementById('acrop-bright-slider');
-  const cs = document.getElementById('acrop-contrast-slider');
-  acropBright = parseInt(bs.value, 10);
-  acropContrast = parseInt(cs.value, 10);
-  document.getElementById('acrop-bright-val').textContent = acropBright + '%';
+  acropBright   = parseInt(document.getElementById('acrop-bright-slider').value, 10);
+  acropContrast = parseInt(document.getElementById('acrop-contrast-slider').value, 10);
+  document.getElementById('acrop-bright-val').textContent   = acropBright + '%';
   document.getElementById('acrop-contrast-val').textContent = acropContrast + '%';
-  const img = document.getElementById('acrop-img');
-  img.style.filter = `brightness(${acropBright}%) contrast(${acropContrast}%)`;
-}
-
-function acropInitStage() {
-  const wrap = document.getElementById('acrop-stage-wrap');
-  const W = wrap.clientWidth, H = wrap.clientHeight;
-  // Fit image to stage
-  acropBaseScale = Math.min(W / acropNatW, H / acropNatH);
-  acropZoom = 1;
-  const iw = acropNatW * acropBaseScale;
-  const ih = acropNatH * acropBaseScale;
-  acropOffX = (W - iw) / 2;
-  acropOffY = (H - ih) / 2;
-  acropApplyImgTransform();
-  // Initial crop box = 90% of image display area
-  const pad = 0.05;
-  acropBox = { x: acropOffX + iw*pad, y: acropOffY + ih*pad, w: iw*(1-2*pad), h: ih*(1-2*pad) };
-  acropDrawBox();
-  // Reset slider
-  const sl = document.getElementById('acrop-zoom-slider');
-  sl.value = 1; sl.min = 0.25; sl.max = 4;
-  document.getElementById('acrop-zoom-val').textContent = '1.0×';
-  acropBindEvents();
-}
-
-function acropApplyImgTransform() {
-  const img = document.getElementById('acrop-img');
-  const effectiveScale = acropBaseScale * acropZoom;
-  img.style.width  = acropNatW * effectiveScale + 'px';
-  img.style.height = acropNatH * effectiveScale + 'px';
-  img.style.left   = acropOffX + 'px';
-  img.style.top    = acropOffY + 'px';
-  img.style.transform = '';
-}
-
-function acropDrawBox() {
-  const box = document.getElementById('acrop-box');
-  box.style.left   = acropBox.x + 'px';
-  box.style.top    = acropBox.y + 'px';
-  box.style.width  = Math.max(40, acropBox.w) + 'px';
-  box.style.height = Math.max(40, acropBox.h) + 'px';
+  document.getElementById('acrop-img').style.filter = `brightness(${acropBright}%) contrast(${acropContrast}%)`;
 }
 
 function acropOnZoom(val) {
-  const wrap = document.getElementById('acrop-stage-wrap');
-  const W = wrap.clientWidth, H = wrap.clientHeight;
-  const prevZoom = acropZoom;
   acropZoom = parseFloat(val);
   document.getElementById('acrop-zoom-val').textContent = acropZoom.toFixed(1) + '×';
-  // Zoom toward center of stage
-  const cx = W/2, cy = H/2;
-  acropOffX = cx - (cx - acropOffX) * (acropZoom / prevZoom);
-  acropOffY = cy - (cy - acropOffY) * (acropZoom / prevZoom);
-  acropApplyImgTransform();
+  acropRedraw();
 }
 
 function acropBindEvents() {
   const wrap = document.getElementById('acrop-stage-wrap');
   const box  = document.getElementById('acrop-box');
 
-  // Use a single pointer handler on wrap to avoid conflicts
+  // ── Unified pointer handler ──
+  let dragState = null; // {type, startStageX, startStageY, origCrop, origPan, handle}
+
+  const getStageXY = ev => {
+    const r = wrap.getBoundingClientRect();
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  };
+
+  const HANDLE_HIT = 18; // px hit area for handles
+
+  function hitTest(sx, sy) {
+    const bTL = acropImgToStage(acropCrop.x, acropCrop.y);
+    const bBR = acropImgToStage(acropCrop.x + acropCrop.w, acropCrop.y + acropCrop.h);
+    const bMX = (bTL.x + bBR.x) / 2;
+    const bMY = (bTL.y + bBR.y) / 2;
+    const near = (a, b) => Math.abs(a - b) <= HANDLE_HIT;
+    const inX  = sx >= bTL.x - HANDLE_HIT && sx <= bBR.x + HANDLE_HIT;
+    const inY  = sy >= bTL.y - HANDLE_HIT && sy <= bBR.y + HANDLE_HIT;
+    const onL  = near(sx, bTL.x) && inY;
+    const onR  = near(sx, bBR.x) && inY;
+    const onT  = near(sy, bTL.y) && inX;
+    const onB  = near(sy, bBR.y) && inX;
+    if (onT && onL) return 'tl';
+    if (onT && onR) return 'tr';
+    if (onB && onL) return 'bl';
+    if (onB && onR) return 'br';
+    if (onT) return 't';
+    if (onB) return 'b';
+    if (onL) return 'l';
+    if (onR) return 'r';
+    // Inside box = move
+    if (sx >= bTL.x && sx <= bBR.x && sy >= bTL.y && sy <= bBR.y) return 'move';
+    return 'pan';
+  }
+
   wrap.onpointerdown = ev => {
-    // Determine what was hit
-    const handle = ev.target.dataset && ev.target.dataset.handle;
-    const hitBox = ev.target === box || (ev.target.closest && ev.target.closest('#acrop-box') === box);
-
+    if (ev.button !== 0 && ev.pointerType === 'mouse') return;
     wrap.setPointerCapture(ev.pointerId);
-
-    if (handle) {
-      // Resizing a corner or edge
-      acropDrag = {
-        type: handle,
-        startX: ev.clientX, startY: ev.clientY,
-        origBox: {...acropBox}
-      };
-    } else if (hitBox) {
-      // Moving the box
-      acropDrag = {
-        type: 'move',
-        startX: ev.clientX, startY: ev.clientY,
-        origBox: {...acropBox}
-      };
-    } else {
-      // Panning the image
-      acropDrag = {
-        type: 'pan',
-        startX: ev.clientX, startY: ev.clientY,
-        origOff: {x: acropOffX, y: acropOffY}
-      };
-    }
+    const s = getStageXY(ev);
+    const handle = hitTest(s.x, s.y);
+    dragState = {
+      type: handle,
+      startImg: acropStageToImg(s.x, s.y),
+      origCrop: {...acropCrop},
+      origPan:  {x: acropPanX, y: acropPanY}
+    };
     ev.preventDefault();
   };
 
   wrap.onpointermove = ev => {
-    if (!acropDrag) return;
-    const dx = ev.clientX - acropDrag.startX;
-    const dy = ev.clientY - acropDrag.startY;
-    const t = acropDrag.type;
+    if (!dragState) return;
+    const s = getStageXY(ev);
+    const curImg = acropStageToImg(s.x, s.y);
+    const dix = curImg.x - dragState.startImg.x;
+    const diy = curImg.y - dragState.startImg.y;
+    const oc = dragState.origCrop;
+    const t = dragState.type;
 
     if (t === 'pan') {
-      acropOffX = acropDrag.origOff.x + dx;
-      acropOffY = acropDrag.origOff.y + dy;
-      acropApplyImgTransform();
+      acropPanX = dragState.origPan.x + dix;
+      acropPanY = dragState.origPan.y + diy;
     } else if (t === 'move') {
-      acropBox.x = acropDrag.origBox.x + dx;
-      acropBox.y = acropDrag.origBox.y + dy;
-      acropDrawBox();
+      acropCrop.x = oc.x + dix;
+      acropCrop.y = oc.y + diy;
     } else {
-      // Resize
-      let {x, y, w, h} = acropDrag.origBox;
-      if (t==='tl'||t==='l'||t==='bl') { const nx=x+dx, nw=w-dx; if(nw>40){acropBox.x=nx; acropBox.w=nw;} }
-      if (t==='tr'||t==='r'||t==='br') { const nw=w+dx; if(nw>40) acropBox.w=nw; }
-      if (t==='tl'||t==='t'||t==='tr') { const ny=y+dy, nh=h-dy; if(nh>40){acropBox.y=ny; acropBox.h=nh;} }
-      if (t==='bl'||t==='b'||t==='br') { const nh=h+dy; if(nh>40) acropBox.h=nh; }
-      acropDrawBox();
+      let {x, y, w, h} = oc;
+      if (t==='l'||t==='tl'||t==='bl') { const nx=x+dix, nw=w-dix; if(nw>10){acropCrop.x=nx; acropCrop.w=nw;} }
+      if (t==='r'||t==='tr'||t==='br') { const nw=w+dix; if(nw>10) acropCrop.w=nw; }
+      if (t==='t'||t==='tl'||t==='tr') { const ny=y+diy, nh=h-diy; if(nh>10){acropCrop.y=ny; acropCrop.h=nh;} }
+      if (t==='b'||t==='bl'||t==='br') { const nh=h+diy; if(nh>10) acropCrop.h=nh; }
     }
+    acropRedraw();
   };
 
-  wrap.onpointerup = wrap.onpointercancel = () => { acropDrag = null; };
+  wrap.onpointerup = wrap.onpointercancel = () => { dragState = null; };
 
-  // Clear old box-level handlers to avoid double-firing
-  box.onpointerdown = null;
-  box.onpointermove = null;
-  box.onpointerup   = null;
+  // Cursor feedback
+  wrap.onmousemove = ev => {
+    if (dragState) return;
+    const s = getStageXY(ev);
+    const h = hitTest(s.x, s.y);
+    const cursors = {tl:'nw-resize',tr:'ne-resize',bl:'sw-resize',br:'se-resize',t:'n-resize',b:'s-resize',l:'w-resize',r:'e-resize',move:'move',pan:'grab'};
+    wrap.style.cursor = cursors[h] || 'grab';
+  };
 
   // ── Pinch zoom ──
   wrap.ontouchstart = ev => {
     if (ev.touches.length === 2) {
-      acropDrag = null;
-      const dx = ev.touches[0].clientX - ev.touches[1].clientX;
-      const dy = ev.touches[0].clientY - ev.touches[1].clientY;
-      acropPinchDist0 = Math.hypot(dx, dy);
+      dragState = null;
+      acropPinchDist0 = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
       acropPinchZoom0 = acropZoom;
     }
   };
   wrap.ontouchmove = ev => {
     if (ev.touches.length === 2) {
       ev.preventDefault();
-      const dx = ev.touches[0].clientX - ev.touches[1].clientX;
-      const dy = ev.touches[0].clientY - ev.touches[1].clientY;
-      const newZoom = Math.min(4, Math.max(0.25, acropPinchZoom0 * Math.hypot(dx,dy) / acropPinchDist0));
-      const sl = document.getElementById('acrop-zoom-slider');
-      sl.value = newZoom;
+      const dist = Math.hypot(ev.touches[0].clientX - ev.touches[1].clientX, ev.touches[0].clientY - ev.touches[1].clientY);
+      const newZoom = Math.min(8, Math.max(0.1, acropPinchZoom0 * dist / acropPinchDist0));
+      document.getElementById('acrop-zoom-slider').value = newZoom;
       acropOnZoom(newZoom);
     }
   };
@@ -3463,8 +3503,8 @@ function acropBindEvents() {
   // ── Mouse wheel zoom ──
   wrap.onwheel = ev => {
     ev.preventDefault();
-    const delta = ev.deltaY > 0 ? -0.1 : 0.1;
-    const newZoom = Math.min(4, Math.max(0.25, acropZoom + delta));
+    const delta = ev.deltaY > 0 ? -0.15 : 0.15;
+    const newZoom = Math.min(8, Math.max(0.1, acropZoom + delta));
     document.getElementById('acrop-zoom-slider').value = newZoom;
     acropOnZoom(newZoom);
   };
@@ -3516,13 +3556,11 @@ async function applyAdminCrop() {
   btn.disabled = true; btn.textContent = 'Saving…';
 
   try {
-    // Compute crop rect in natural image pixels
-    // acropBox is in stage-local CSS px; acropOffX/Y is image top-left in stage-local px
-    const effectiveScale = acropBaseScale * acropZoom;
-    const sx = Math.max(0, Math.round((acropBox.x - acropOffX) / effectiveScale));
-    const sy = Math.max(0, Math.round((acropBox.y - acropOffY) / effectiveScale));
-    const sw = Math.min(acropNatW - sx, Math.max(1, Math.round(acropBox.w / effectiveScale)));
-    const sh = Math.min(acropNatH - sy, Math.max(1, Math.round(acropBox.h / effectiveScale)));
+    // acropCrop is already in natural image pixels — clamp to image bounds
+    const sx = Math.max(0, Math.round(acropCrop.x));
+    const sy = Math.max(0, Math.round(acropCrop.y));
+    const sw = Math.min(acropNatW - sx, Math.max(1, Math.round(acropCrop.w)));
+    const sh = Math.min(acropNatH - sy, Math.max(1, Math.round(acropCrop.h)));
 
     // Draw cropped region onto canvas
     const canvas = document.createElement('canvas');
@@ -4601,7 +4639,7 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
   <div id="acrop-bottombar">
     <div class="acrop-row">
       <span>🔍 Zoom</span>
-      <input id="acrop-zoom-slider" type="range" min="0.25" max="4" step="0.01" value="1" oninput="acropOnZoom(this.value)">
+      <input id="acrop-zoom-slider" type="range" min="0.1" max="8" step="0.05" value="1" oninput="acropOnZoom(this.value)">
       <span id="acrop-zoom-val">1.0×</span>
     </div>
     <div class="acrop-row">
