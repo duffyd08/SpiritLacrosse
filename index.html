@@ -1443,7 +1443,7 @@ select.fi option{background:var(--navy2)}
     <div class="submit-wrap">
       <div class="submit-hero">
         <h1 style="color:var(--navy)">Stick Carvings</h1>
-        <p>Draw your illustration with the box below as a size reference then upload it here. All submissions are reviewed before accepted into the gallery.</p>
+        <p>Use the box below as a size reference, draw your illustration, then upload it here.</p>
       </div>
       <!-- PRINTABLE TEMPLATE BOX -->
       <div class="template-box-wrap">
@@ -1457,7 +1457,7 @@ select.fi option{background:var(--navy2)}
             <span class="template-box-hint">Print · Draw · Photograph · Submit</span>
           </div>
         </div>
-        <div class="template-box-label">Draw your carving within this box, then photograph and upload it below</div>
+        <div class="template-box-label" style="display:none">Draw your carving within this box, then photograph and upload it below</div>
       </div>
 
       <div id="sub-err" class="alert err"></div>
@@ -1521,7 +1521,7 @@ select.fi option{background:var(--navy2)}
 
         <div class="field-row" style="margin-top:1.125rem">
           <div>
-            <label class="fl" style="margin-top:0">Age *</label>
+            <label class="fl" style="margin-top:0">Age <span class="fl-opt">(optional)</span></label>
             <input class="fi" id="f-age" type="number" placeholder="Your age" min="1" max="120">
           </div>
           <div>
@@ -1591,17 +1591,16 @@ select.fi option{background:var(--navy2)}
         </div>
 
         <label class="fl">Description *</label>
-        <textarea class="fi" id="f-desc" placeholder="Tell us about your carving — what it represents, how you made it, the story behind it…"></textarea>
+        <textarea class="fi" id="f-desc" placeholder="The more you share — team, year, school, meaning behind the image — the more discoverable your carving will be in search."></textarea>
       </div>
 
       <!-- EMAIL -->
       <div class="email-card">
-        <div class="form-section-lbl">Stay in the Loop</div>
-        <label class="fl" style="margin-top:0">Email Address <span class="fl-opt">(optional)</span></label>
-        <input class="fi" id="f-email" type="email" placeholder="your@email.com">
+        <div class="form-section-lbl">Email <span style="font-size:10px;opacity:.6;letter-spacing:1px">(optional)</span></div>
+        <input class="fi" id="f-email" type="email" placeholder="your@email.com" style="margin-top:0">
         <div class="privacy-note">
           <div class="privacy-icon">🔒</div>
-          <div class="privacy-text">Your email is shared with the author only and will never be displayed publicly.</div>
+          <div class="privacy-text">Shared with the author only, never displayed publicly.</div>
         </div>
       </div>
 
@@ -1609,9 +1608,8 @@ select.fi option{background:var(--navy2)}
       <div class="release-card">
         <label class="release-label">
           <input type="checkbox" id="f-release" class="release-check" onchange="document.getElementById('sub-btn').disabled=!this.checked">
-          <span class="release-text">I agree to transfer rights to this carving to the author, who may display it in any electronic or print form. <span class="release-req">Required</span></span>
+          <span class="release-text">I agree to transfer display rights to this carving to the author. <span class="release-req">Required</span></span>
         </label>
-        <div class="release-disclaimer">The author reserves the right to edit, post, or delete submissions at his sole discretion.</div>
       </div>
 
       <button class="btn btn-gold" id="sub-btn" onclick="doSubmit()" disabled>Submit Carving →</button>
@@ -2649,7 +2647,7 @@ async function doSubmit() {
   const desc  = document.getElementById('f-desc').value.trim();
   const email = document.getElementById('f-email').value.trim();
   ['sub-err'].forEach(id=>document.getElementById(id).classList.remove('show'));
-  if (!fname||!age||!state||!desc||!selFile){ showErr('Please fill in First Name, Age, State, Description and upload a photo.'); return; }
+  if (!fname||!state||!desc||!selFile){ showErr('Please fill in First Name, State, Description and upload a photo.'); return; }
   const btn = document.getElementById('sub-btn');
   btn.disabled=true; btn.textContent='Uploading…';
   try {
