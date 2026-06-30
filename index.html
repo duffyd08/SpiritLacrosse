@@ -1522,7 +1522,7 @@ select.fi option{background:var(--navy2)}
         <div class="field-row" style="margin-top:1.125rem">
           <div>
             <label class="fl" style="margin-top:0">Age <span class="fl-opt">(optional)</span></label>
-            <input class="fi" id="f-age" type="number" placeholder="Your age" min="1" max="120">
+            <input class="fi" id="f-age" type="number" placeholder="Your age">
           </div>
           <div>
             <label class="fl" style="margin-top:0">Affiliation <span class="fl-opt">(optional)</span></label>
@@ -2648,6 +2648,7 @@ async function doSubmit() {
   const email = document.getElementById('f-email').value.trim();
   ['sub-err'].forEach(id=>document.getElementById(id).classList.remove('show'));
   if (!fname||!state||!desc||!selFile){ showErr('Please fill in First Name, State, Description and upload a photo.'); return; }
+  if (age && (isNaN(parseInt(age)) || parseInt(age) < 1 || parseInt(age) > 120)){ showErr('Please enter a valid age.'); return; }
   const btn = document.getElementById('sub-btn');
   btn.disabled=true; btn.textContent='Uploading…';
   try {
