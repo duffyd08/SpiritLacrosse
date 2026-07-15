@@ -1724,7 +1724,6 @@ select.fi option{background:var(--navy2)}
 const SB_URL   = 'https://xjbssojirtbdygsoughm.supabase.co';
 const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqYnNzb2ppcnRiZHlnc291Z2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMTMyOTYsImV4cCI6MjA5NTU4OTI5Nn0.c8qeAdKW0UrurTTwHvj3jrEX4u4i4A4PgaZhP6KCkOg';
 const ADMIN_PW = 'Navy984**$$';
-const RESEND_KEY = 're_13iqwVbt_WwsxGLX3mi9ujbns7SYXzGgk';
 
 let sb = null, selFile = null, curAdminStatus = 'pending';
 let allApproved = [], cache = {};
@@ -2830,7 +2829,6 @@ async function decide(id, status) {
   const {error} = await sb.from('illustrations').update({status}).eq('id',id);
   if (!error){
     if (status === 'approved' && s && s.image_url) {
-      sendApprovalEmail(buildDisplayName(s), s.state||'', s.description||'', s.image_url||'');
       await promoteToFront(id);
       // Generate transparent version and save it — runs once so visitors never have to
       generateAndSaveTransparent(id, s.image_url);
@@ -3916,38 +3914,6 @@ async function faSave() {
 }
 
 // ── EMAIL NOTIFICATION ─────────────────────────────────
-async function sendApprovalEmail(displayName, state, description, imageUrl) {
-  try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${RESEND_KEY}`
-      },
-      body: JSON.stringify({
-        from: 'SpiritLacrosse <onboarding@resend.dev>',
-        to: ['duffyneil84@gmail.com'],
-        subject: `🥍 New carving approved — ${displayName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#07111f;color:#f8f4ec;padding:2rem;border-radius:12px">
-            <div style="font-size:28px;font-weight:900;letter-spacing:4px;color:#e8b84b;margin-bottom:.5rem">SPIRITLACROSSE</div>
-            <div style="font-size:13px;color:#6e7e94;letter-spacing:2px;margin-bottom:2rem;text-transform:uppercase">Admin Notification</div>
-            <h2 style="font-size:22px;color:#f8f4ec;margin-bottom:1rem">A new carving is live! 🎉</h2>
-            <p style="font-size:15px;color:#ccc8be;line-height:1.7;margin-bottom:1rem">
-              <strong style="color:#e8b84b">${displayName}</strong> from <strong style="color:#e8b84b">${state}</strong> has had their illustration approved and is now live in the gallery.
-            </p>
-            <p style="font-size:14px;color:#ccc8be;line-height:1.7;margin-bottom:1.5rem;font-style:italic">"${description}"</p>
-            ${imageUrl ? `<img src="${imageUrl}" style="width:100%;border-radius:8px;margin-bottom:1.5rem" alt="${displayName}'s carving">` : ''}
-            <a href="https://goldyva.github.io/MLBPickEm/index.html" style="display:inline-block;background:#e8b84b;color:#07111f;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px;letter-spacing:1px">View The Gallery →</a>
-            <div style="margin-top:2rem;font-size:11px;color:#3a4e66;border-top:1px solid #152848;padding-top:1rem">
-              Inspired by <em>The Spirit in the Stick</em> by Neil Duffy
-            </div>
-          </div>
-        `
-      })
-    });
-  } catch(e) { console.warn('Email failed:', e); }
-}
 
 // ── FULL VIEWER ────────────────────────────────────────
 let viewerList = [];
