@@ -702,7 +702,7 @@ select.fi option{background:var(--navy2)}
 .atab.active{background:var(--gold);color:var(--navy);border-color:var(--gold)}
 .atab:hover:not(.active){color:var(--white);border-color:rgba(232,184,75,.4)}
 .a-count{display:inline-block;background:var(--danger);color:#fff;border-radius:99px;font-size:10px;padding:1px 6px;margin-left:5px;font-family:'DM Mono',monospace}
-.ac{background:rgba(7,17,31,.9);border:1px solid var(--gold-border);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem;display:flex;flex-direction:column;transition:opacity .4s}
+.ac{background:rgba(7,17,31,.9);border:1px solid var(--gold-border);border-radius:var(--rl);overflow:hidden;margin-bottom:1.5rem;display:flex;flex-direction:column;transition:opacity .4s;position:relative}
 .ac-img{width:100%;height:340px;object-fit:cover;display:block;background:var(--navy3);cursor:zoom-in}
 .ac-img:hover{opacity:.92}
 .ac-img-ph{width:100%;height:240px;background:var(--navy3);display:flex;align-items:center;justify-content:center;font-size:48px}
@@ -1725,7 +1725,86 @@ const SB_URL   = 'https://xjbssojirtbdygsoughm.supabase.co';
 const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqYnNzb2ppcnRiZHlnc291Z2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMTMyOTYsImV4cCI6MjA5NTU4OTI5Nn0.c8qeAdKW0UrurTTwHvj3jrEX4u4i4A4PgaZhP6KCkOg';
 const ADMIN_PW = 'Navy984**$$';
 
+// R2 image hosting (replaces Supabase Storage for images to avoid egress limits)
+const R2_WORKER_URL = 'https://spirit-upload-proxy.YOUR-SUBDOMAIN.workers.dev'; // TODO: paste your Worker URL
+const R2_PUBLIC_URL = 'https://pub-XXXXXXXX.r2.dev';                            // TODO: paste your R2 public base URL
+
+async function uploadToR2(file, filename, contentType) {
+  const res = await fetch(R2_WORKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType, 'X-Filename': filename },
+    body: file,
+  });
+  if (!res.ok) throw new Error('R2 upload failed: ' + (await res.text()));
+  const { path } = await res.json();
+  return `${R2_PUBLIC_URL}/${path}`;
+}
+
 let sb = null, selFile = null, curAdminStatus = 'pending';
+let selectedForDelete = new Set();
+
+// Deletes an image (JPEG or PNG) from wherever it's hosted — R2 or legacy Supabase Storage
+async function deleteImageFile(url) {
+  if (!url) return;
+  try {
+    if (url.startsWith(R2_PUBLIC_URL)) {
+      const path = url.slice(R2_PUBLIC_URL.length + 1); // strip base + leading slash
+      await fetch(R2_WORKER_URL, { method: 'DELETE', headers: { 'X-Filename': path } });
+    } else if (url.includes('supabase.co')) {
+      // Legacy files still on Supabase Storage (pre-migration)
+      const marker = '/illustrations/';
+      const idx = url.indexOf(marker);
+      if (idx !== -1) {
+        const path = decodeURIComponent(url.slice(idx + marker.length));
+        await sb.storage.from('illustrations').remove([path]);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to delete image file:', url, e);
+  }
+}
+
+async function bulkDeleteSelected() {
+  if (selectedForDelete.size === 0) return;
+  if (!confirm(`Permanently delete ${selectedForDelete.size} denied submission(s) and their images? This cannot be undone.`)) return;
+
+  const ids = Array.from(selectedForDelete);
+  const bar = document.getElementById('bulk-delete-btn');
+  if (bar) { bar.disabled = true; bar.textContent = 'Deleting…'; }
+
+  for (const id of ids) {
+    const s = cache[id];
+    if (s) {
+      await deleteImageFile(s.image_url);
+      await deleteImageFile(s.transparent_url);
+      await deleteImageFile(s.original_image_url);
+    }
+    await sb.from('illustrations').delete().eq('id', id);
+    delete cache[id];
+  }
+
+  selectedForDelete.clear();
+  loadAdmin('denied', null);
+}
+
+function toggleSelectForDelete(id, checked) {
+  if (checked) selectedForDelete.add(id);
+  else selectedForDelete.delete(id);
+  updateBulkDeleteBar();
+}
+
+function toggleSelectAllForDelete(checked, ids) {
+  selectedForDelete = checked ? new Set(ids) : new Set();
+  document.querySelectorAll('.ac-select-cb').forEach(cb => cb.checked = checked);
+  updateBulkDeleteBar();
+}
+
+function updateBulkDeleteBar() {
+  const btn = document.getElementById('bulk-delete-btn');
+  if (!btn) return;
+  btn.textContent = `🗑 Delete Selected (${selectedForDelete.size})`;
+  btn.disabled = selectedForDelete.size === 0;
+}
 let allApproved = [], cache = {};
 
 // ── COVER IMAGE (base64 embedded) ──────────────────────
@@ -2340,7 +2419,7 @@ function renderSticks(items, isSearch, bgMap = new Map()) {
       div.dataset.id   = s.id;
       // Priority: pre-processed transparent URL → canvas-processed → raw
       const resolvedSrc = s.transparent_url || bgMap.get(s.image_url) || s.image_url;
-      div.innerHTML = `<img src="${esc(resolvedSrc)}" alt="${esc(buildDisplayName(s))}">`;
+      div.innerHTML = `<img src="${esc(resolvedSrc)}" loading="lazy" alt="${esc(buildDisplayName(s))}">`;
       div.title = buildDisplayName(s);
       div.onclick = () => openModal(s);
       photoRow.appendChild(div);
@@ -2610,7 +2689,7 @@ function applyCrop() {
   const sy = Math.max(0, Math.round((boxT - cropOffsetY) / effectiveScale));
   const sw = Math.min(cropImgNaturalW - sx, Math.round(cropBoxSize / effectiveScale));
   const sh = Math.min(cropImgNaturalH - sy, Math.round(cropBoxSize / effectiveScale));
-  const SIZE = 1024;
+  const SIZE = 800;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
   const src = new Image();
@@ -2627,7 +2706,7 @@ function applyCrop() {
       document.getElementById('crop-wrap').style.display = 'none';
       document.getElementById('change-ph').style.display = 'block';
       URL.revokeObjectURL(cropObjectUrl); cropObjectUrl = null;
-    }, 'image/jpeg', 0.92);
+    }, 'image/jpeg', 0.8);
   };
   src.src = cropObjectUrl;
 }
@@ -2650,9 +2729,7 @@ async function doSubmit() {
   btn.disabled=true; btn.textContent='Uploading…';
   try {
     const fname2 = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-    const { error: upErr } = await sb.storage.from('illustrations').upload(fname2, selFile, {contentType:'image/jpeg'});
-    if (upErr) throw upErr;
-    const { data: urlD } = sb.storage.from('illustrations').getPublicUrl(fname2);
+    const publicUrl = await uploadToR2(selFile, fname2, 'image/jpeg');
     // Build display name based on age privacy rule
     const ageNum = parseInt(age);
     let displayName = fname;
@@ -2667,7 +2744,7 @@ async function doSubmit() {
       state: state,
       description: desc,
       email: email || null,
-      image_url: urlD.publicUrl,
+      image_url: publicUrl,
       device: getDeviceType(),
       status: 'pending'
     }]);
@@ -2748,12 +2825,24 @@ async function loadAdmin(status, btnEl) {
       <div id="backfill-progress" style="display:none;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.5px;margin-bottom:.75rem;padding:.5rem .75rem;border-radius:var(--r);border:1px solid var(--gold-border);background:rgba(232,184,75,.06)"></div>
       ` : '';
 
-    el.innerHTML = reorderBar + data.map((s, idx) => {
+    const bulkDeleteBar = status === 'denied' ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem;flex-wrap:wrap;gap:.5rem">
+        <label style="display:flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer">
+          <input type="checkbox" onchange="toggleSelectAllForDelete(this.checked, ${JSON.stringify(data.map(s=>s.id))})">
+          Select All
+        </label>
+        <button class="an-refresh" id="bulk-delete-btn" onclick="bulkDeleteSelected()" disabled style="color:var(--danger,#e05555)">🗑 Delete Selected (0)</button>
+      </div>
+      ` : '';
+    selectedForDelete.clear();
+
+    el.innerHTML = reorderBar + bulkDeleteBar + data.map((s, idx) => {
       const dname = buildDisplayName(s);
       const meta  = [s.age ? 'Age '+s.age : '', s.state || '', s.affiliation || ''].filter(Boolean).join(' · ');
       const deviceIcon = s.device === 'mobile' ? '📱' : s.device === 'tablet' ? '📲' : s.device === 'desktop' ? '💻' : null;
       const deviceLabel = deviceIcon ? `${deviceIcon} ${s.device.charAt(0).toUpperCase()+s.device.slice(1)}` : null;
       return `<div class="ac" id="ac-${s.id}">
+        ${status==='denied'?`<label style="position:absolute;top:8px;left:8px;z-index:2;background:rgba(0,0,0,.55);border-radius:4px;padding:3px 5px;display:flex;align-items:center"><input type="checkbox" class="ac-select-cb" onchange="toggleSelectForDelete('${s.id}', this.checked)"></label>`:''}
         ${s.image_url?`<img class="ac-img" src="${esc(s.image_url)}" alt="${esc(dname)}" onclick="openLightbox('${esc(s.image_url)}')">`:'<div class="ac-img-ph">🎨</div>'}
         <div class="ac-body">
           <span class="badge badge-${s.status}">${s.status}</span>
@@ -2909,22 +2998,13 @@ async function generateAndSaveTransparent(id, imageUrl, silent = false) {
     const res  = await fetch(dataUrl);
     const blob = await res.blob();
 
-    // Upload to Supabase storage as a PNG alongside the original
+    // Upload the transparent PNG to R2 (Cloudflare handles caching automatically)
     const fname = `transparent/${id}_transparent.png`;
-    // Remove old version if it exists (upsert)
-    await sb.storage.from('illustrations').remove([fname]);
-    const { error: upErr } = await sb.storage.from('illustrations').upload(fname, blob, {
-      contentType: 'image/png',
-      cacheControl: '31536000' // cache for 1 year
-    });
-    if (upErr) throw upErr;
-
-    const { data: urlD } = sb.storage.from('illustrations').getPublicUrl(fname);
-    if (!urlD?.publicUrl) throw new Error('No public URL');
+    const transparentUrl = await uploadToR2(blob, fname, 'image/png');
 
     // Save transparent_url to the database row
-    await sb.from('illustrations').update({ transparent_url: urlD.publicUrl }).eq('id', id);
-    if (cache[id]) cache[id].transparent_url = urlD.publicUrl;
+    await sb.from('illustrations').update({ transparent_url: transparentUrl }).eq('id', id);
+    if (cache[id]) cache[id].transparent_url = transparentUrl;
 
     if (!silent) {
       const ind = document.getElementById('transp-ind-'+id);
@@ -3588,12 +3668,9 @@ async function applyAdminCrop() {
 
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.93));
 
-    // Upload new file to Supabase storage
+    // Upload new (re-cropped) file to R2
     const fname = `cropped-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-    const { error: upErr } = await sb.storage.from('illustrations').upload(fname, blob, {contentType:'image/jpeg'});
-    if (upErr) throw upErr;
-    const { data: urlD } = sb.storage.from('illustrations').getPublicUrl(fname);
-    const newUrl = urlD.publicUrl;
+    const newUrl = await uploadToR2(blob, fname, 'image/jpeg');
 
     // Update DB — save original_image_url on first crop only, clear stale transparent
     const existing = cache[acropId];
