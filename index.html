@@ -1725,33 +1725,14 @@ const SB_URL   = 'https://xjbssojirtbdygsoughm.supabase.co';
 const SB_KEY   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqYnNzb2ppcnRiZHlnc291Z2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMTMyOTYsImV4cCI6MjA5NTU4OTI5Nn0.c8qeAdKW0UrurTTwHvj3jrEX4u4i4A4PgaZhP6KCkOg';
 const ADMIN_PW = 'Navy984**$$';
 
-// R2 image hosting (replaces Supabase Storage for images to avoid egress limits)
-const R2_WORKER_URL = 'https://spirit-upload-proxy.YOUR-SUBDOMAIN.workers.dev'; // TODO: paste your Worker URL
-const R2_PUBLIC_URL = 'https://pub-XXXXXXXX.r2.dev';                            // TODO: paste your R2 public base URL
-
-async function uploadToR2(file, filename, contentType) {
-  const res = await fetch(R2_WORKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': contentType, 'X-Filename': filename },
-    body: file,
-  });
-  if (!res.ok) throw new Error('R2 upload failed: ' + (await res.text()));
-  const { path } = await res.json();
-  return `${R2_PUBLIC_URL}/${path}`;
-}
-
 let sb = null, selFile = null, curAdminStatus = 'pending';
 let selectedForDelete = new Set();
 
-// Deletes an image (JPEG or PNG) from wherever it's hosted — R2 or legacy Supabase Storage
+// Deletes an image file from Supabase Storage given its public URL
 async function deleteImageFile(url) {
   if (!url) return;
   try {
-    if (url.startsWith(R2_PUBLIC_URL)) {
-      const path = url.slice(R2_PUBLIC_URL.length + 1); // strip base + leading slash
-      await fetch(R2_WORKER_URL, { method: 'DELETE', headers: { 'X-Filename': path } });
-    } else if (url.includes('supabase.co')) {
-      // Legacy files still on Supabase Storage (pre-migration)
+    if (url.includes('supabase.co')) {
       const marker = '/illustrations/';
       const idx = url.indexOf(marker);
       if (idx !== -1) {
@@ -1769,8 +1750,8 @@ async function bulkDeleteSelected() {
   if (!confirm(`Permanently delete ${selectedForDelete.size} denied submission(s) and their images? This cannot be undone.`)) return;
 
   const ids = Array.from(selectedForDelete);
-  const bar = document.getElementById('bulk-delete-btn');
-  if (bar) { bar.disabled = true; bar.textContent = 'Deleting…'; }
+  const btn = document.getElementById('bulk-delete-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
 
   for (const id of ids) {
     const s = cache[id];
@@ -2419,7 +2400,7 @@ function renderSticks(items, isSearch, bgMap = new Map()) {
       div.dataset.id   = s.id;
       // Priority: pre-processed transparent URL → canvas-processed → raw
       const resolvedSrc = s.transparent_url || bgMap.get(s.image_url) || s.image_url;
-      div.innerHTML = `<img src="${esc(resolvedSrc)}" loading="lazy" alt="${esc(buildDisplayName(s))}">`;
+      div.innerHTML = `<img src="${esc(resolvedSrc)}" alt="${esc(buildDisplayName(s))}">`;
       div.title = buildDisplayName(s);
       div.onclick = () => openModal(s);
       photoRow.appendChild(div);
@@ -2689,7 +2670,7 @@ function applyCrop() {
   const sy = Math.max(0, Math.round((boxT - cropOffsetY) / effectiveScale));
   const sw = Math.min(cropImgNaturalW - sx, Math.round(cropBoxSize / effectiveScale));
   const sh = Math.min(cropImgNaturalH - sy, Math.round(cropBoxSize / effectiveScale));
-  const SIZE = 800;
+  const SIZE = 1024;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
   const src = new Image();
@@ -2706,7 +2687,7 @@ function applyCrop() {
       document.getElementById('crop-wrap').style.display = 'none';
       document.getElementById('change-ph').style.display = 'block';
       URL.revokeObjectURL(cropObjectUrl); cropObjectUrl = null;
-    }, 'image/jpeg', 0.8);
+    }, 'image/jpeg', 0.92);
   };
   src.src = cropObjectUrl;
 }
@@ -2729,7 +2710,9 @@ async function doSubmit() {
   btn.disabled=true; btn.textContent='Uploading…';
   try {
     const fname2 = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-    const publicUrl = await uploadToR2(selFile, fname2, 'image/jpeg');
+    const { error: upErr } = await sb.storage.from('illustrations').upload(fname2, selFile, {contentType:'image/jpeg'});
+    if (upErr) throw upErr;
+    const { data: urlD } = sb.storage.from('illustrations').getPublicUrl(fname2);
     // Build display name based on age privacy rule
     const ageNum = parseInt(age);
     let displayName = fname;
@@ -2744,7 +2727,7 @@ async function doSubmit() {
       state: state,
       description: desc,
       email: email || null,
-      image_url: publicUrl,
+      image_url: urlD.publicUrl,
       device: getDeviceType(),
       status: 'pending'
     }]);
@@ -2831,7 +2814,7 @@ async function loadAdmin(status, btnEl) {
           <input type="checkbox" onchange="toggleSelectAllForDelete(this.checked, ${JSON.stringify(data.map(s=>s.id))})">
           Select All
         </label>
-        <button class="an-refresh" id="bulk-delete-btn" onclick="bulkDeleteSelected()" disabled style="color:var(--danger,#e05555)">🗑 Delete Selected (0)</button>
+        <button class="an-refresh" id="bulk-delete-btn" onclick="bulkDeleteSelected()" disabled style="color:#e05555">🗑 Delete Selected (0)</button>
       </div>
       ` : '';
     selectedForDelete.clear();
@@ -2998,13 +2981,22 @@ async function generateAndSaveTransparent(id, imageUrl, silent = false) {
     const res  = await fetch(dataUrl);
     const blob = await res.blob();
 
-    // Upload the transparent PNG to R2 (Cloudflare handles caching automatically)
+    // Upload to Supabase storage as a PNG alongside the original
     const fname = `transparent/${id}_transparent.png`;
-    const transparentUrl = await uploadToR2(blob, fname, 'image/png');
+    // Remove old version if it exists (upsert)
+    await sb.storage.from('illustrations').remove([fname]);
+    const { error: upErr } = await sb.storage.from('illustrations').upload(fname, blob, {
+      contentType: 'image/png',
+      cacheControl: '31536000' // cache for 1 year
+    });
+    if (upErr) throw upErr;
+
+    const { data: urlD } = sb.storage.from('illustrations').getPublicUrl(fname);
+    if (!urlD?.publicUrl) throw new Error('No public URL');
 
     // Save transparent_url to the database row
-    await sb.from('illustrations').update({ transparent_url: transparentUrl }).eq('id', id);
-    if (cache[id]) cache[id].transparent_url = transparentUrl;
+    await sb.from('illustrations').update({ transparent_url: urlD.publicUrl }).eq('id', id);
+    if (cache[id]) cache[id].transparent_url = urlD.publicUrl;
 
     if (!silent) {
       const ind = document.getElementById('transp-ind-'+id);
@@ -3668,9 +3660,12 @@ async function applyAdminCrop() {
 
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.93));
 
-    // Upload new (re-cropped) file to R2
+    // Upload new file to Supabase storage
     const fname = `cropped-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
-    const newUrl = await uploadToR2(blob, fname, 'image/jpeg');
+    const { error: upErr } = await sb.storage.from('illustrations').upload(fname, blob, {contentType:'image/jpeg'});
+    if (upErr) throw upErr;
+    const { data: urlD } = sb.storage.from('illustrations').getPublicUrl(fname);
+    const newUrl = urlD.publicUrl;
 
     // Update DB — save original_image_url on first crop only, clear stale transparent
     const existing = cache[acropId];
